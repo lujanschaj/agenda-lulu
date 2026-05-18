@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
+  <meta name="apple-mobile-web-app-title" content="Agenda Lulu"/>
+  <title>Agenda Lulu 🌻</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+    body{font-family:'Nunito',sans-serif;background:#FAF8F5;overscroll-behavior:none;}
+    #root{max-width:480px;margin:0 auto;min-height:100vh;}
+    input,select,textarea,button{font-family:'Nunito',sans-serif;}
+    input[type="date"]::-webkit-calendar-picker-indicator{opacity:0.6;}
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <script type="text/babel">
+    const { useState, useCallback, useMemo, useEffect } = React;
+
+    const FONT = "'Nunito', sans-serif";
+    const API  = "https://script.google.com/macros/s/AKfycbwHH2WI1MahI1Ksvz4yZPFCO5r2IyDHPqs_0O5Qc9QQjXhDmo7QYnD_42y3ECSKZQ/exec";
+
+    const C = {
+      bordo:   { solid:"#A0485A", light:"#F5E6EA", border:"#D4A0AA", text:"#A0485A" },
+      naranja: { solid:"#D4784A", light:"#FDF0EA", border:"#E8B090", text:"#C06038" },
+      lila:    { solid:"#7B5EA7", light:"#EEE8F8", border:"#B09AD4", text:"#7B5EA7" },
+      verde:   { solid:"#4A8C6A", light:"#E6F4EC", border:"#90C8A8", text:"#3A7A58" },
+    };
+    const P = {
+      bg:"#FAF8F5", surf:"#FFFFFF", sAlt:"#F5F0EB", border:"#EDE8E1",
+      text:"#2D2520", muted:"#9A8E85", accent:"#A0485A",
+      cats:{
+        salud:     {bg:"#F5E6EA",text:"#A0485A",dot:"#C87888"},
+        ens:       {bg:"#EEE8F8",text:"#7B5EA7",dot:"#A890D0"},
+        fundacion: {bg:"#FDF0EA",text:"#C06038",dot:"#E09070"},
+        amigas:    {bg:"#E6F4EC",text:"#3A7A58",dot:"#70B890"},
+        compras:   {bg:"#E8F0F8",text:"#3A68A0",dot:"#7AA0C8"},
+        personal:  {bg:"#F0EEF8",text:"#6858A0",dot:"#9888C8"},
+      },
+    };
+    const CAT_ICONS={salud:"🌿",ens:"📚",fundacion:"🏛️",amigas:"🤍",compras:"🛍️",personal:"🌸"};
+    const DAYS=["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
+    const MONTHS=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+    const now=new Date();
+    const fmt=d=>d.toISOString().slice(0,10);
+    const shift=(d,n)=>{const r=new Date(d);r.setDate(r.getDate()+n);return r;};
+    const TODAY=fmt(now);
+    const toMins=t=>{if(!t)return 0;const[h,m]=t.split(":").map(Number);return h*60+m;};
+    const DAY_START=7*60,DAY_END=23*60,DAY_TOTAL=DAY_END-DAY_START;
+    const pct=m=>Math.max(0,Math.min(100,((m-DAY_START)/DAY_TOTAL)*100));
+    const durPct=(s,e)=>Math.max(1,((toMins(e)-toMins(s))/DAY_TOTAL)*100);
+
+    function weekOf(base){const d=base.getDay(),mon=shift(base,-(d===0?6:d-1));return Array.from({length:7},(_,i)=>shift(mon,i));}
+    function monthCells(y,m){const first=new Date(y,m,1).getDay(),off=first===0?6:first-1,total=new Date(y,m+1,0).getDate(),cells=[];for(let i=0;i<off;i++)cells.push(null);for(let i=1;i<=total;i++)cells.push(new Date(y,m,i));return cells;}
+
+    async function api(accion,datos={}){
+      try{
+        const url=`${API}?accion=${encodeURIComponent(accion)}&datos=${encodeURIComponent(JSON.stringify(datos))}`;
+        const res=await fetch(url);
+        return await res.json();
+      }catch(e){return{ok:false,error:e.toString()};}
+    }
+
+    const BLANK_WL={date:TODAY,sleep:"",sleepQ:"",weight:"",migraine:"No",migraineHours:"",bano:"",digestion:"",energy:5,humor:"",relax:"",musculacion:false,musculacionMins:"",cinta:false,cintaMins:"",mary:false,otraActividad:"",otraActividadMins:"",ocupacion:"",comidas:"",huevos:false,agua:"",med0:"",med1:"",med2:"",med3:"",med4:"",med5:"",med6:"",med7:"",med8:"",med9:"",notes:""};
+
+    const INP={width:"100%",padding:"10px 12px",borderRadius:12,border:`1.5px solid ${P.border}`,background:P.sAlt,color:P.text,fontSize:16,fontFamily:FONT,boxSizing:"border-box",outline:"none"};
+    const SEL={...INP,cursor:"pointer"};
+    const SAVE={width:"100%",padding:14,borderRadius:14,border:"none",background:`linear-gradient(135deg,${C.bordo.solid},#C06878)`,color:"#FFF",fontSize:15,fontWeight:700,cursor:"pointer",marginTop:8,boxShadow:`0 4px 16px rgba(160,72,90,.3)`,fontFamily:FONT};
+    const DEL={...SAVE,marginTop:8,background:P.sAlt,color:"#C2506A",boxShadow:"none",border:`1.5px solid ${P.border}`};
+
+    function CatTag({cat,sm}){const c=P.cats[cat]||P.cats.personal;return <span style={{background:c.bg,color:c.text,borderRadius:20,padding:sm?"2px 8px":"3px 11px",fontSize:sm?11:12,fontWeight:700,whiteSpace:"nowrap"}}>{CAT_ICONS[cat]||"•"} {cat}</span>;}
+    function Lbl({t,children}){return <div style={{marginBottom:14}}><label style={{display:"block",fontSize:12,fontWeight:700,color:P.muted,marginBottom:6,textTransform:"uppercase",letterSpacing:.8}}>{t}</label>{children}</div>;}
+    function SecTit({t}){return <p style={{fontSize:12,fontWeight:800,color:C.lila.solid,textTransform:"uppercase",letterSpacing:1,margin:"20px 0 10px"}}>{t}</p>;}
+    function Empty({t}){return <p style={{textAlign:"center",color:P.muted,fontSize:13,padding:"14px 0",fontStyle:"italic"}}>{t}</p>;}
+    function Chip({label,bg=P.sAlt,col=P.muted}){return <span style={{background:bg,color:col,fontSize:11,padding:"4px 10px",borderRadius:20,fontWeight:600}}>{label}</span>;}
+    function Spinner(){return <div style={{textAlign:"center",padding:"10px 0",fontSize:13,color:P.muted}}>⏳ Guardando en Sheets...</div>;}
+
+    function SegBtn({options,val,onChange,variant="bordo"}){
+      const sel=variant==="lila"?C.lila:variant==="verde"?C.verde:variant==="naranja"?C.naranja:C.bordo;
+      return <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{options.map(o=><button key={o} onClick={()=>onChange(o===val?null:o)} style={{padding:"9px 13px",borderRadius:10,border:`1.5px solid ${val===o?sel.border:P.border}`,background:val===o?sel.light:P.sAlt,color:val===o?sel.text:P.muted,fontSize:13,fontWeight:700,cursor:"pointer",minHeight:40}}>{o}</button>)}</div>;
+    }
+    function YesNo({val,onChange,variant="verde"}){
+      const sel=variant==="lila"?C.lila:variant==="naranja"?C.naranja:C.verde;
+      return <div style={{display:"flex",gap:8}}>{[true,false].map(v=><button key={String(v)} onClick={()=>onChange(v)} style={{flex:1,padding:"10px 0",borderRadius:10,border:`1.5px solid ${val===v?sel.border:P.border}`,background:val===v?sel.light:P.sAlt,color:val===v?sel.text:P.muted,fontSize:13,fontWeight:700,cursor:"pointer",minHeight:44}}>{v?"Sí":"No"}</button>)}</div>;
+    }
+
+    function Modal({title,onClose,children}){
+      return(
+        <div style={{position:"fixed",inset:0,background:"rgba(45,37,32,.38)",zIndex:1000,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
+          <div onClick={e=>e.stopPropagation()} style={{background:P.surf,borderRadius:"24px 24px 0 0",width:"100%",maxWidth:480,padding:"24px 20px 80px",maxHeight:"88vh",overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
+              <h3 style={{margin:0,fontSize:18,fontWeight:800,color:P.text}}>{title}</h3>
+              <button onClick={onClose} style={{background:P.sAlt,border:"none",borderRadius:"50%",width:40,height:40,cursor:"pointer",fontSize:18,color:P.muted,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+            </div>
+            {children}
+          </div>
+        </div>
+      );
+    }
+
+    function TimelineBar({evs}){
+      return(
+        <div style={{position:"relative",height:10,background:P.sAlt,borderRadius:6,marginBottom:8,overflow:"visible",marginTop:22}}>
+          {[7,9,11,13,15,17,19,21,23].map(h=><div key={h} style={{position:"absolute",left:`${pct(h*60)}%`,top:-16,fontSize:8,color:P.muted,transform:"translateX(-50%)"}}>{h}</div>)}
+          {[7,9,11,13,15,17,19,21,23].map(h=><div key={h} style={{position:"absolute",left:`${pct(h*60)}%`,top:0,width:1,height:"100%",background:P.border,opacity:.5}}/>)}
+          {evs.map(ev=>{
+            const c=P.cats[ev.cat]||P.cats.personal;
+            const l=pct(toMins(ev.timeS)),w=durPct(ev.timeS,ev.timeE);
+            const tvW=ev.travel?(ev.travel/DAY_TOTAL)*100:0,tvL=ev.travel?pct(toMins(ev.timeS)-ev.travel):null;
+            return <div key={ev.id}>{ev.travel>0&&<div style={{position:"absolute",left:`${tvL}%`,width:`${tvW}%`,height:"100%",background:C.naranja.border,borderRadius:4,top:0,opacity:.6}}/>}<div style={{position:"absolute",left:`${l}%`,width:`${w}%`,height:"100%",background:c.dot,borderRadius:4,top:0,minWidth:4}}/></div>;
+          })}
+        </div>
+      );
+    }
+
+    function EvRow({ev,onToggle,onEdit}){
+      const c=P.cats[ev.cat]||P.cats.personal;
+      const dur=toMins(ev.timeE)-toMins(ev.timeS);
+      const durStr=dur>=60?`${Math.floor(dur/60)}h${dur%60>0?" "+dur%60+"min":""}`:`${dur}min`;
+      return(
+        <div style={{display:"flex",gap:11,padding:"13px 14px",background:ev.done?P.sAlt:c.bg,borderRadius:14,marginBottom:8,opacity:ev.done?.6:1}}>
+          <button onClick={onToggle} style={{flexShrink:0,marginTop:3,width:24,height:24,borderRadius:"50%",border:`2px solid ${c.dot}`,background:ev.done?c.dot:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",minWidth:24}}>
+            {ev.done&&<span style={{color:"#FFF",fontSize:12,fontWeight:700}}>✓</span>}
+          </button>
+          <div style={{flex:1}}>
+            <p style={{margin:0,fontSize:15,fontWeight:700,color:P.text,textDecoration:ev.done?"line-through":"none"}}>{ev.title}</p>
+            <div style={{display:"flex",gap:8,marginTop:5,flexWrap:"wrap",alignItems:"center"}}>
+              {ev.timeS&&ev.timeE&&<span style={{fontSize:12,color:c.text,fontWeight:700}}>🕐 {ev.timeS} – {ev.timeE} · {durStr}</span>}
+              {ev.travel>0&&<span style={{fontSize:11,color:P.muted}}>🚌 {ev.travel}min</span>}
+              <CatTag cat={ev.cat} sm/>
+              {ev.rep==="weekly"&&<span style={{fontSize:11,color:P.muted}}>↻ semanal</span>}
+            </div>
+            {ev.notes&&<p style={{margin:"5px 0 0",fontSize:12,color:P.muted,fontStyle:"italic"}}>{ev.notes}</p>}
+          </div>
+          <button onClick={onEdit} style={{background:"none",border:"none",cursor:"pointer",fontSize:20,padding:"0 4px",color:P.muted,flexShrink:0,minWidth:32,minHeight:32,display:"flex",alignItems:"center",justifyContent:"center"}}>✏️</button>
+        </div>
+      );
+    }
+
+    function TaRow({t,onToggle,onResched,onConv,onEdit,compact}){
+      const c=P.cats[t.cat]||P.cats.personal;
+      return(
+        <div style={{display:"flex",gap:10,padding:"12px 14px",background:P.surf,borderRadius:14,marginBottom:8,border:`1.5px solid ${P.border}`,opacity:t.done?.5:1}}>
+          <button onClick={onToggle} style={{flexShrink:0,marginTop:2,width:24,height:24,borderRadius:6,border:`2px solid ${c.dot}`,background:t.done?c.dot:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",minWidth:24}}>
+            {t.done&&<span style={{color:"#FFF",fontSize:11,fontWeight:700}}>✓</span>}
+          </button>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+              <p style={{margin:0,fontSize:14,fontWeight:700,color:P.text,textDecoration:t.done?"line-through":"none",flex:1,wordBreak:"break-word"}}>{t.hi&&"⚡ "}{t.title}</p>
+              {!compact&&<div style={{display:"flex",gap:4,marginLeft:8,flexShrink:0}}>
+                <button onClick={onEdit} style={{background:P.sAlt,border:"none",borderRadius:8,width:32,height:32,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>✏️</button>
+                {!t.done&&<button onClick={onResched} style={{background:P.sAlt,border:"none",borderRadius:8,width:32,height:32,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>📆</button>}
+                {!t.done&&<button onClick={onConv} style={{background:P.sAlt,border:"none",borderRadius:8,width:32,height:32,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>🗓️</button>}
+              </div>}
+            </div>
+            <div style={{display:"flex",gap:7,marginTop:5,flexWrap:"wrap",alignItems:"center"}}>
+              <CatTag cat={t.cat} sm/>
+              {t.date&&<span style={{fontSize:11,color:P.muted}}>{t.date}</span>}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function ShRow({s,onToggle,onEdit}){
+      const c=P.cats[s.cat]||P.cats.compras;
+      return(
+        <div style={{display:"flex",alignItems:"center",gap:11,padding:"13px 14px",background:s.done?P.sAlt:P.surf,borderRadius:14,marginBottom:8,border:`1.5px solid ${P.border}`,opacity:s.done?.55:1}}>
+          <button onClick={onToggle} style={{flexShrink:0,width:26,height:26,borderRadius:8,border:`2px solid ${c.dot}`,background:s.done?c.dot:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",minWidth:26}}>
+            {s.done&&<span style={{color:"#FFF",fontSize:12,fontWeight:700}}>✓</span>}
+          </button>
+          <div style={{flex:1}}>
+            <p style={{margin:0,fontSize:14,fontWeight:700,color:P.text,textDecoration:s.done?"line-through":"none"}}>{s.item}</p>
+            {s.notes&&<p style={{margin:"2px 0 0",fontSize:12,color:P.muted}}>{s.notes}</p>}
+          </div>
+          {s.cat&&<CatTag cat={s.cat} sm/>}
+          <button onClick={onEdit} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,padding:"0 4px",color:P.muted,minWidth:32,minHeight:32,display:"flex",alignItems:"center",justifyContent:"center"}}>✏️</button>
+        </div>
+      );
+    }
+
+    function Sec({title,action,children}){
+      return(
+        <div style={{marginBottom:22}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:11}}>
+            <h2 style={{margin:0,fontSize:16,fontWeight:800,color:P.text}}>{title}</h2>
+            {action&&<button onClick={action.fn} style={{background:"none",border:"none",cursor:"pointer",fontSize:13,color:C.bordo.solid,fontWeight:700,padding:"4px 0",minHeight:32}}>{action.label}</button>}
+          </div>
+          {children}
+        </div>
+      );
+    }
+
+    function WellnessForm({wl0,setWl0,onSave,saving,lastMeds}){
+      const set=useCallback((k,v)=>setWl0(p=>({...p,[k]:v})),[setWl0]);
+      const copyMeds=()=>{if(!lastMeds)return;[0,1,2,3,4,5,6,7,8,9].forEach(i=>set(`med${i}`,lastMeds[`med${i}`]||""));};
+      return(
+        <div>
+          <Lbl t="Fecha"><input type="date" style={INP} value={wl0.date} max={TODAY} onChange={e=>set("date",e.target.value)}/></Lbl>
+          <SecTit t="💤 Sueño"/>
+          <Lbl t="Horas de sueño"><input type="number" style={INP} value={wl0.sleep} min="0" max="24" placeholder="ej: 7" onChange={e=>set("sleep",e.target.value)}/></Lbl>
+          <Lbl t="Calidad de sueño"><SegBtn options={["Excelente","Bueno","Regular","Malo"]} val={wl0.sleepQ} onChange={v=>set("sleepQ",v)} variant="lila"/></Lbl>
+          <SecTit t="🌡️ Cuerpo"/>
+          <Lbl t="Peso (kg)"><input type="number" step="0.1" style={INP} value={wl0.weight} placeholder="ej: 65.5" onChange={e=>set("weight",e.target.value)}/></Lbl>
+          <Lbl t="Migraña">
+            <SegBtn options={["No","Leve","Moderada","Fuerte"]} val={wl0.migraine} onChange={v=>set("migraine",v||"No")} variant="bordo"/>
+            {wl0.migraine&&wl0.migraine!=="No"&&<input type="number" style={{...INP,marginTop:8}} value={wl0.migraineHours} placeholder="Duración en horas" onChange={e=>set("migraineHours",e.target.value)}/>}
+          </Lbl>
+          <Lbl t="Digestión"><SegBtn options={["Bien","Gases","Inflamación","Dolor"]} val={wl0.digestion} onChange={v=>set("digestion",v)} variant="naranja"/></Lbl>
+          <Lbl t="Baño (veces)"><SegBtn options={["1","2","3","4","5"]} val={wl0.bano} onChange={v=>set("bano",v)} variant="verde"/></Lbl>
+          <SecTit t="✨ Energía & Mente"/>
+          <Lbl t={`Energía · ${wl0.energy}/10`}><input type="range" min="1" max="10" style={{width:"100%",accentColor:C.lila.solid,height:32}} value={wl0.energy} onChange={e=>set("energy",e.target.value)}/></Lbl>
+          <Lbl t="Humor"><SegBtn options={["Muy bien","Bien","Regular","Variable","Ansiosa","Baja","Insoportable"]} val={wl0.humor} onChange={v=>set("humor",v)} variant="lila"/></Lbl>
+          <Lbl t="Relax (minutos)"><input type="number" style={INP} value={wl0.relax} placeholder="ej: 30" onChange={e=>set("relax",e.target.value)}/></Lbl>
+          <SecTit t="💪 Actividad física"/>
+          <Lbl t="Musculación"><YesNo val={wl0.musculacion} onChange={v=>set("musculacion",v)} variant="verde"/>{wl0.musculacion&&<input type="number" style={{...INP,marginTop:8}} value={wl0.musculacionMins} placeholder="Minutos" onChange={e=>set("musculacionMins",e.target.value)}/>}</Lbl>
+          <Lbl t="Cinta"><YesNo val={wl0.cinta} onChange={v=>set("cinta",v)} variant="verde"/>{wl0.cinta&&<input type="number" style={{...INP,marginTop:8}} value={wl0.cintaMins} placeholder="Minutos" onChange={e=>set("cintaMins",e.target.value)}/>}</Lbl>
+          <Lbl t="Mary"><YesNo val={wl0.mary} onChange={v=>set("mary",v)} variant="verde"/></Lbl>
+          <Lbl t="Otra actividad"><input style={INP} value={wl0.otraActividad} placeholder="¿Qué hiciste?" onChange={e=>set("otraActividad",e.target.value)}/>{wl0.otraActividad&&<input type="number" style={{...INP,marginTop:8}} value={wl0.otraActividadMins} placeholder="Minutos" onChange={e=>set("otraActividadMins",e.target.value)}/>}</Lbl>
+          <Lbl t="Ocupación del día"><SegBtn options={["Bajo","Normal","Alto"]} val={wl0.ocupacion} onChange={v=>set("ocupacion",v)} variant="naranja"/></Lbl>
+          <SecTit t="🥗 Alimentación"/>
+          <Lbl t="Cantidad de comidas"><SegBtn options={["1","2","3","4","5","6"]} val={wl0.comidas} onChange={v=>set("comidas",v)} variant="naranja"/></Lbl>
+          <Lbl t="Desayuno con huevos"><YesNo val={wl0.huevos} onChange={v=>set("huevos",v)} variant="naranja"/></Lbl>
+          <Lbl t="Agua (botellas YETI)"><input type="number" step="0.5" style={INP} value={wl0.agua} placeholder="ej: 2.5" onChange={e=>set("agua",e.target.value)}/></Lbl>
+          <SecTit t="💊 Medicación"/>
+          {lastMeds&&<button onClick={copyMeds} style={{...SAVE,background:`linear-gradient(135deg,${C.lila.solid},#9878C8)`,marginBottom:12,marginTop:0}}>Copiar medicamentos de ayer</button>}
+          {[0,1,2,3,4,5,6,7,8,9].map(i=><div key={i} style={{marginBottom:8}}><input style={INP} value={wl0[`med${i}`]} placeholder={`Medicamento ${i+1}`} onChange={e=>set(`med${i}`,e.target.value)}/></div>)}
+          <SecTit t="📝 Notas"/>
+          <Lbl t="Síntomas u observaciones"><textarea style={{...INP,minHeight:70,resize:"none"}} value={wl0.notes} placeholder="Cualquier cosa que quieras registrar..." onChange={e=>set("notes",e.target.value)}/></Lbl>
+          {saving?<Spinner/>:<button onClick={onSave} style={SAVE}>Guardar registro</button>}
+        </div>
+      );
+    }
+
+    function LuluAgenda(){
+      const [tab,setTab]=useState("home");
+      const [dark,setDark]=useState(false);
+      const [loading,setLoading]=useState(true);
+      const [saving,setSaving]=useState(false);
+      const [syncMsg,setSyncMsg]=useState("");
+      const [events,setEvents]=useState([]);
+      const [tasks,setTasks]=useState([]);
+      const [inbox,setInbox]=useState([]);
+      const [shopLists,setShopLists]=useState([{id:"general",name:"General",items:[]},{id:"coto",name:"Coto",items:[]},{id:"mayorista",name:"Mayorista",items:[]}]);
+      const [wlog,setWlog]=useState([]);
+      const [wBase,setWBase]=useState(new Date());
+      const [mBase,setMBase]=useState({y:now.getFullYear(),m:now.getMonth()});
+      const [selD,setSelD]=useState(TODAY);
+      const [calV,setCalV]=useState("week");
+      const [modal,setModal]=useState(null);
+      const [editEv,setEditEv]=useState(null);
+      const [editTa,setEditTa]=useState(null);
+      const [resT,setResT]=useState(null);
+      const [fcat,setFcat]=useState("todas");
+      const [sq,setSq]=useState("");
+      const [activeList,setActiveList]=useState("general");
+      const [editShItem,setEditShItem]=useState(null);
+      const [editShList,setEditShList]=useState(null);
+      const [ev0,setEv0]=useState({title:"",timeS:"",timeE:"",travel:0,date:TODAY,cat:"personal",rep:"none",notes:""});
+      const [ta0,setTa0]=useState({title:"",date:TODAY,cat:"personal",notes:"",hi:false});
+      const [ib0,setIb0]=useState("");
+      const [wl0,setWl0]=useState({...BLANK_WL});
+      const [shItemForm,setShItemForm]=useState({item:"",cat:"compras",notes:"",listId:"general"});
+      const [newListName,setNewListName]=useState("");
+      const [editListName,setEditListName]=useState("");
+
+      const dsurf=dark?"#2A2420":P.surf;
+      const dtxt=dark?"#F0EAE4":P.text;
+      const dmut=dark?"#9A8E85":P.muted;
+      const dbdr=dark?"#3A3430":P.border;
+      const dbg=dark?"#1A1614":P.bg;
+      const wdays=weekOf(wBase);
+
+      useEffect(()=>{cargarTodo();},[]);
+
+      async function cargarTodo(){
+        setLoading(true);
+        try{
+          const r=await api("leerTodo");
+          if(r.ok){
+            if(r.eventos?.length)setEvents(r.eventos.map(e=>({id:e["ID"],title:e["Título"],timeS:e["Hora Inicio"],timeE:e["Hora Fin"],travel:Number(e["Tiempo Viaje (min)"])||0,date:e["Fecha"],cat:(e["Categoría"]||"personal").toLowerCase(),rep:e["Repetición"]||"none",notes:e["Notas"]||"",done:e["Hecho"]==="TRUE"||e["Hecho"]===true})));
+            if(r.tareas?.length)setTasks(r.tareas.map(t=>({id:t["ID"],title:t["Título"],date:t["Fecha"],cat:(t["Categoría"]||"personal").toLowerCase(),notes:t["Notas"]||"",done:t["Hecho"]==="TRUE"||t["Hecho"]===true,hi:t["Prioridad Alta"]==="TRUE"||t["Prioridad Alta"]===true})));
+            if(r.bienestar?.length)setWlog(r.bienestar.map(w=>({id:w["ID"],date:w["Fecha"],sleep:w["Horas Sueño"],sleepQ:w["Calidad Sueño"],weight:w["Peso"],migraine:w["Migraña"],migraineHours:w["Horas Migraña"],digestion:w["Digestión"],bano:w["Baño"],energy:w["Energía"],humor:w["Humor"],relax:w["Relax (min)"],musculacion:w["Musculación"]==="TRUE",musculacionMins:w["Minutos Musculación"],cinta:w["Cinta"]==="TRUE",cintaMins:w["Minutos Cinta"],mary:w["Mary"]==="TRUE",otraActividad:w["Otra Actividad"],otraActividadMins:w["Minutos Otra Actividad"],ocupacion:w["Ocupación"],comidas:w["Comidas"],huevos:w["Huevos"]==="TRUE",agua:w["Agua YETI"],med0:w["Med1"],med1:w["Med2"],med2:w["Med3"],med3:w["Med4"],med4:w["Med5"],med5:w["Med6"],med6:w["Med7"],med7:w["Med8"],med8:w["Med9"],med9:w["Med10"],notes:w["Notas"]})));
+            if(r.comprasGeneral?.length){const items=r.comprasGeneral.map(s=>({id:s["ID"],item:s["Ítem"],cat:(s["Categoría"]||"compras").toLowerCase(),done:s["Hecho"]==="TRUE"||s["Hecho"]===true,notes:s["Notas"]||""}));setShopLists(p=>p.map(l=>l.id==="general"?{...l,items}:l));}
+            if(r.comprasListas?.length){const byList={};r.comprasListas.forEach(s=>{const ln=s["Lista"];if(!byList[ln])byList[ln]=[];byList[ln].push({id:s["ID"],item:s["Ítem"],done:s["Hecho"]==="TRUE"||s["Hecho"]===true,notes:s["Notas"]||""});});setShopLists(p=>{let lists=[...p];Object.entries(byList).forEach(([name,items])=>{const id=name.toLowerCase().replace(/\s+/g,"-");const idx=lists.findIndex(l=>l.id===id||l.name===name);if(idx>=0)lists[idx]={...lists[idx],items};else lists.push({id,name,items});});return lists;});}
+            if(r.inbox?.length)setInbox(r.inbox.map(i=>({id:i["ID"],text:i["Texto"],date:i["Fecha"]})));
+            showSync("✅ Sincronizado con Google Sheets");
+          }
+        }catch(e){showSync("⚠️ Sin conexión — modo local");}
+        setLoading(false);
+      }
+
+      function showSync(msg){setSyncMsg(msg);setTimeout(()=>setSyncMsg(""),3000);}
+
+      function getEventsForDate(date){return events.filter(e=>{if(e.date===date)return true;if(e.rep==="weekly"){const orig=new Date(e.date+"T12:00:00"),tgt=new Date(date+"T12:00:00"),diff=Math.round((tgt-orig)/(1000*60*60*24));return diff>0&&diff%7===0;}return false;}).sort((a,b)=>toMins(a.timeS)-toMins(b.timeS));}
+      function hasConflict(list,ev){return list.some(e=>e.id!==ev.id&&e.date===ev.date&&ev.timeS&&ev.timeE&&toMins(e.timeS)<toMins(ev.timeE)&&toMins(e.timeE)>toMins(ev.timeS));}
+      const lastWlog=wlog.length>0?wlog[wlog.length-1]:null;
+      const curList=shopLists.find(l=>l.id===activeList)||shopLists[0];
+
+      function openNewEv(){setEv0({title:"",timeS:"",timeE:"",travel:0,date:selD,cat:"personal",rep:"none",notes:""});setEditEv(null);setModal("ev");}
+      function openEditEv(ev){setEv0({...ev});setEditEv(ev.id);setModal("ev");}
+      async function saveEv(){
+        if(!ev0.title||!ev0.timeS||!ev0.timeE)return;
+        setSaving(true);
+        const datos={titulo:ev0.title,horaInicio:ev0.timeS,horaFin:ev0.timeE,tiempoViaje:ev0.travel,fecha:ev0.date,categoria:ev0.cat,repeticion:ev0.rep,notas:ev0.notes,hecho:false,id:editEv||undefined};
+        if(editEv){setEvents(p=>p.map(e=>e.id===editEv?{...ev0,id:editEv}:e));await api("editarEvento",datos);}
+        else{const r=await api("guardarEvento",datos);setEvents(p=>[...p,{...ev0,id:r.id||Date.now().toString(),done:false}]);}
+        setSaving(false);setModal(null);setEditEv(null);showSync("✅ Evento guardado");
+      }
+      async function deleteEv(){setSaving(true);await api("eliminarEvento",{id:editEv});setEvents(p=>p.filter(e=>e.id!==editEv));setSaving(false);setModal(null);setEditEv(null);showSync("🗑️ Eliminado");}
+
+      function openNewTa(){setTa0({title:"",date:selD,cat:"personal",notes:"",hi:false});setEditTa(null);setModal("ta");}
+      function openEditTa(t){setTa0({...t});setEditTa(t.id);setModal("ta");}
+      async function saveTa(){
+        if(!ta0.title)return;
+        setSaving(true);
+        const datos={titulo:ta0.title,fecha:ta0.date,categoria:ta0.cat,notas:ta0.notes,hecho:false,prioridadAlta:ta0.hi,id:editTa||undefined};
+        if(editTa){setTasks(p=>p.map(t=>t.id===editTa?{...ta0,id:editTa}:t));await api("editarTarea",datos);}
+        else{const r=await api("guardarTarea",datos);setTasks(p=>[...p,{...ta0,id:r.id||Date.now().toString(),done:false}]);}
+        setSaving(false);setModal(null);setEditTa(null);showSync("✅ Tarea guardada");
+      }
+      async function deleteTa(){setSaving(true);await api("eliminarTarea",{id:editTa});setTasks(p=>p.filter(t=>t.id!==editTa));setSaving(false);setModal(null);setEditTa(null);showSync("🗑️ Eliminada");}
+
+      const togEv=async id=>{const ev=events.find(e=>e.id===id);if(!ev)return;const u={...ev,done:!ev.done};setEvents(p=>p.map(e=>e.id===id?u:e));await api("editarEvento",{id,titulo:ev.title,horaInicio:ev.timeS,horaFin:ev.timeE,tiempoViaje:ev.travel,fecha:ev.date,categoria:ev.cat,repeticion:ev.rep,notas:ev.notes,hecho:u.done});};
+      const togTa=async id=>{const t=tasks.find(t=>t.id===id);if(!t)return;const u={...t,done:!t.done};setTasks(p=>p.map(x=>x.id===id?u:x));await api("editarTarea",{id,titulo:t.title,fecha:t.date,categoria:t.cat,notas:t.notes,hecho:u.done,prioridadAlta:t.hi});};
+      const conv2ev=async t=>{const r=await api("guardarEvento",{titulo:t.title,horaInicio:"10:00",horaFin:"11:00",tiempoViaje:0,fecha:t.date,categoria:t.cat,repeticion:"none",notas:t.notes,hecho:false});setEvents(p=>[...p,{id:r.id||Date.now().toString(),title:t.title,timeS:"10:00",timeE:"11:00",travel:0,date:t.date,cat:t.cat,rep:"none",notes:t.notes,done:false}]);await api("eliminarTarea",{id:t.id});setTasks(p=>p.filter(x=>x.id!==t.id));showSync("✅ Convertido a evento");};
+      const doResched=async(id,d)=>{const t=tasks.find(x=>x.id===id);if(!t)return;setTasks(p=>p.map(x=>x.id===id?{...x,date:d}:x));await api("editarTarea",{id,titulo:t.title,fecha:d,categoria:t.cat,notas:t.notes,hecho:t.done,prioridadAlta:t.hi});setResT(null);setModal(null);showSync("📆 Reprogramada");};
+      const saveIb=async()=>{if(!ib0.trim())return;setSaving(true);const r=await api("guardarInbox",{texto:ib0,fecha:TODAY});setInbox(p=>[...p,{id:r.id||Date.now().toString(),text:ib0,date:TODAY}]);setIb0("");setSaving(false);setModal(null);showSync("✅ Guardado en inbox");};
+      const delIb=async id=>{await api("eliminarInbox",{id});setInbox(p=>p.filter(i=>i.id!==id));};
+      const saveWl=async()=>{setSaving(true);const r=await api("guardarBienestar",wl0);setWlog(p=>[...p,{...wl0,id:r.id||Date.now().toString()}]);setWl0({...BLANK_WL});setSaving(false);setModal(null);showSync("✅ Bienestar guardado");};
+
+      function openNewShItem(){setShItemForm({item:"",cat:"compras",notes:"",listId:activeList});setEditShItem(null);setModal("shItem");}
+      function openEditShItem(lid,s){setShItemForm({...s,listId:lid});setEditShItem(s.id);setModal("shItem");}
+      async function saveShItem(){
+        if(!shItemForm.item.trim())return;
+        setSaving(true);
+        const lid=shItemForm.listId,isG=lid==="general";
+        if(editShItem){
+          setShopLists(p=>p.map(l=>l.id===lid?{...l,items:l.items.map(i=>i.id===editShItem?{...shItemForm,id:editShItem,done:i.done}:i)}:l));
+          await api(isG?"editarCompraGeneral":"editarCompraLista",{id:editShItem,item:shItemForm.item,categoria:shItemForm.cat,lista:shopLists.find(l=>l.id===lid)?.name,notas:shItemForm.notes,hecho:false});
+        }else{
+          const lname=shopLists.find(l=>l.id===lid)?.name||lid;
+          const r=await api(isG?"guardarCompraGeneral":"guardarCompraLista",{item:shItemForm.item,categoria:shItemForm.cat,lista:lname,notas:shItemForm.notes,hecho:false});
+          setShopLists(p=>p.map(l=>l.id===lid?{...l,items:[...l.items,{...shItemForm,id:r.id||Date.now().toString(),done:false}]}:l));
+        }
+        setSaving(false);setModal(null);setEditShItem(null);showSync("✅ Lista actualizada");
+      }
+      async function deleteShItem(){const lid=shItemForm.listId;setShopLists(p=>p.map(l=>l.id===lid?{...l,items:l.items.filter(i=>i.id!==editShItem)}:l));await api(lid==="general"?"eliminarCompraGeneral":"eliminarCompraLista",{id:editShItem});setModal(null);setEditShItem(null);}
+      const togShI=async(lid,iid)=>{setShopLists(p=>p.map(l=>l.id===lid?{...l,items:l.items.map(i=>i.id===iid?{...i,done:!i.done}:i)}:l));const item=shopLists.find(l=>l.id===lid)?.items.find(i=>i.id===iid);if(item)await api(lid==="general"?"editarCompraGeneral":"editarCompraLista",{id:iid,item:item.item,categoria:item.cat,lista:shopLists.find(l=>l.id===lid)?.name,notas:item.notes,hecho:!item.done});};
+      async function clearDone(){const done=curList?.items.filter(s=>s.done)||[];for(const s of done)await api(activeList==="general"?"eliminarCompraGeneral":"eliminarCompraLista",{id:s.id});setShopLists(p=>p.map(l=>l.id===activeList?{...l,items:l.items.filter(s=>!s.done)}:l));showSync("✅ Comprados eliminados");}
+      async function clearAll(){if(!window.confirm("¿Blanquear toda la lista?"))return;const lname=curList?.name;if(activeList!=="general")await api("blanquearLista",{lista:lname});else for(const s of curList?.items||[])await api("eliminarCompraGeneral",{id:s.id});setShopLists(p=>p.map(l=>l.id===activeList?{...l,items:[]}:l));showSync("🗑️ Lista blanqueada");}
+      function saveNewList(){if(!newListName.trim())return;const id="list-"+Date.now();setShopLists(p=>[...p,{id,name:newListName,items:[]}]);setNewListName("");setActiveList(id);setModal(null);}
+      function saveEditList(){if(!editListName.trim())return;setShopLists(p=>p.map(l=>l.id===editShList?{...l,name:editListName}:l));setModal(null);setEditShList(null);}
+      function deleteList(){if(window.confirm("¿Eliminar esta lista?")){setShopLists(p=>p.filter(l=>l.id!==editShList));setActiveList("general");setModal(null);setEditShList(null);}}
+
+      const searchRes=useMemo(()=>sq.length<2?[]:[...events.filter(e=>e.title?.toLowerCase().includes(sq.toLowerCase())).map(e=>({...e,_k:"evento"})),...tasks.filter(t=>t.title?.toLowerCase().includes(sq.toLowerCase())).map(t=>({...t,_k:"tarea"})),...inbox.filter(i=>i.text?.toLowerCase().includes(sq.toLowerCase())).map(i=>({...i,_k:"inbox"}))],[sq,events,tasks,inbox]);
+      const navItems=[{k:"home",i:"🏠",l:"Inicio"},{k:"cal",i:"📅",l:"Agenda"},{k:"tasks",i:"✅",l:"Tareas"},{k:"shop",i:"🛍️",l:"Compras"},{k:"well",i:"🌿",l:"Bienestar"}];
+
+      const DayDetail=({date})=>{
+        const evs=getEventsForDate(date),tas=tasks.filter(t=>t.date===date);
+        const conflict=evs.some((e,i)=>evs.slice(i+1).some(e2=>toMins(e.timeS)<toMins(e2.timeE)&&toMins(e.timeE)>toMins(e2.timeS)));
+        return(
+          <div style={{background:dsurf,borderRadius:18,padding:"16px 15px",border:`1px solid ${dbdr}`}}>
+            <p style={{margin:"0 0 6px",fontSize:12,fontWeight:700,color:dmut,textTransform:"uppercase",letterSpacing:.8}}>{DAYS[new Date(date+"T12:00:00").getDay()]} {new Date(date+"T12:00:00").getDate()}</p>
+            {conflict&&<div style={{background:C.bordo.light,borderRadius:10,padding:"10px 12px",marginBottom:10,fontSize:13,color:C.bordo.text,fontWeight:700}}>⚠️ Hay eventos con horarios superpuestos</div>}
+            {evs.length>0&&<TimelineBar evs={evs}/>}
+            {evs.length===0&&tas.length===0?<Empty t="Día libre"/>:<>{evs.map(e=><EvRow key={e.id+date} ev={e} onToggle={()=>togEv(e.id)} onEdit={()=>openEditEv(e)}/>)}{tas.map(t=><TaRow key={t.id} t={t} onToggle={()=>togTa(t.id)} onResched={()=>{setResT(t);setModal("resched");}} onConv={()=>conv2ev(t)} onEdit={()=>openEditTa(t)}/>)}</>}
+          </div>
+        );
+      };
+
+      const HomeView=()=>{
+        const todEvs=getEventsForDate(TODAY),todTas=tasks.filter(t=>t.date===TODAY&&!t.done);
+        return(
+          <div>
+            <Sec title={`Hoy · ${DAYS[now.getDay()]} ${now.getDate()}`} action={{label:"Ver agenda",fn:()=>setTab("cal")}}>
+              {todEvs.length>0&&<TimelineBar evs={todEvs}/>}
+              {todEvs.length===0&&todTas.length===0?<Empty t="Día tranquilo"/>:<>{todEvs.map(e=><EvRow key={e.id} ev={e} onToggle={()=>togEv(e.id)} onEdit={()=>openEditEv(e)}/>)}{todTas.map(t=><TaRow key={t.id} t={t} onToggle={()=>togTa(t.id)} onResched={()=>{setResT(t);setModal("resched");}} onConv={()=>conv2ev(t)} onEdit={()=>openEditTa(t)} compact/>)}</>}
+            </Sec>
+            <Sec title="Pendientes" action={{label:"Ver todas",fn:()=>setTab("tasks")}}>
+              {tasks.filter(t=>!t.done).length===0?<Empty t="Todo al día"/>:tasks.filter(t=>!t.done).slice(0,4).map(t=><TaRow key={t.id} t={t} onToggle={()=>togTa(t.id)} onResched={()=>{setResT(t);setModal("resched");}} onConv={()=>conv2ev(t)} onEdit={()=>openEditTa(t)} compact/>)}
+            </Sec>
+            <Sec title="Inbox" action={{label:"+ agregar",fn:()=>setModal("ib")}}>
+              {inbox.length===0?<Empty t="Inbox vacío"/>:inbox.slice(0,3).map(i=>(
+                <div key={i.id} style={{background:C.lila.light,borderRadius:12,padding:"12px 14px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                  <p style={{margin:0,fontSize:14,color:C.lila.text,flex:1,lineHeight:1.5}}>{i.text}</p>
+                  <button onClick={()=>delIb(i.id)} style={{background:"none",border:"none",cursor:"pointer",color:P.muted,fontSize:20,marginLeft:10,padding:0,minWidth:32,minHeight:32,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+                </div>
+              ))}
+            </Sec>
+            <Sec title="Compras" action={{label:"Ver lista",fn:()=>setTab("shop")}}>
+              {shopLists[0]?.items.filter(s=>!s.done).length===0?<Empty t="Lista vacía"/>:shopLists[0].items.filter(s=>!s.done).slice(0,3).map(s=><ShRow key={s.id} s={s} onToggle={()=>togShI("general",s.id)} onEdit={()=>openEditShItem("general",s)}/>)}
+            </Sec>
+            <Sec title="Bienestar" action={{label:"Registrar hoy",fn:()=>setModal("wl")}}>
+              {wlog.length===0
+                ?<div style={{background:C.verde.light,borderRadius:14,padding:18,textAlign:"center"}}><p style={{margin:0,fontSize:28}}>🌿</p><p style={{margin:"6px 0 0",fontSize:14,color:C.verde.text}}>Registrá tu bienestar de hoy</p></div>
+                :<div style={{background:C.verde.light,borderRadius:14,padding:"14px 16px"}}><p style={{margin:"0 0 8px",fontSize:13,fontWeight:700,color:C.verde.text}}>Último · {wlog[wlog.length-1].date}</p><div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{wlog[wlog.length-1].sleep&&<Chip label={`💤 ${wlog[wlog.length-1].sleep}h`} bg={C.verde.light} col={C.verde.text}/>}{wlog[wlog.length-1].energy&&<Chip label={`⚡ ${wlog[wlog.length-1].energy}/10`}/>}{wlog[wlog.length-1].humor&&<Chip label={wlog[wlog.length-1].humor}/>}</div></div>}
+            </Sec>
+          </div>
+        );
+      };
+
+      const CalView=()=>(
+        <div>
+          <div style={{display:"flex",gap:8,marginBottom:14}}>
+            {["week","month"].map(v=><button key={v} onClick={()=>setCalV(v)} style={{flex:1,padding:"10px 0",borderRadius:12,border:`1.5px solid ${calV===v?C.bordo.border:P.border}`,cursor:"pointer",background:calV===v?C.bordo.solid:"transparent",color:calV===v?"#FFF":dmut,fontWeight:700,fontSize:14,minHeight:44}}>{v==="week"?"Semana":"Mes"}</button>)}
+          </div>
+          {calV==="week"?<WeekView/>:<MonthView/>}
+        </div>
+      );
+
+      const WeekView=()=>(
+        <div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:13}}>
+            <button onClick={()=>setWBase(d=>shift(d,-7))} style={{background:"none",border:"none",cursor:"pointer",color:C.bordo.solid,fontWeight:700,fontSize:15,padding:"8px 10px",minHeight:44}}>‹ ant</button>
+            <span style={{fontSize:13,fontWeight:700,color:dmut}}>{wdays[0].getDate()} — {wdays[6].getDate()} {MONTHS[wdays[0].getMonth()]}</span>
+            <button onClick={()=>setWBase(d=>shift(d,7))} style={{background:"none",border:"none",cursor:"pointer",color:C.bordo.solid,fontWeight:700,fontSize:15,padding:"8px 10px",minHeight:44}}>sig ›</button>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:18}}>
+            {wdays.map(d=>{
+              const ds=fmt(d),isTod=ds===TODAY,isSel=ds===selD;
+              const has=getEventsForDate(ds).length>0||tasks.some(t=>t.date===ds);
+              return(
+                <button key={ds} onClick={()=>setSelD(ds)} style={{display:"flex",flexDirection:"column",alignItems:"center",padding:"10px 0",borderRadius:14,border:"none",cursor:"pointer",background:isSel?C.bordo.solid:isTod?C.bordo.light:dsurf,boxShadow:isSel?`0 4px 14px rgba(160,72,90,.3)`:"none",width:"100%",minHeight:60}}>
+                  <span style={{fontSize:10,fontWeight:700,color:isSel?"rgba(255,255,255,.85)":dmut}}>{DAYS[d.getDay()]}</span>
+                  <span style={{fontSize:17,fontWeight:800,color:isSel?"#FFF":isTod?C.bordo.solid:dtxt,marginTop:2}}>{d.getDate()}</span>
+                  {has&&<span style={{width:5,height:5,borderRadius:"50%",background:isSel?"rgba(255,255,255,.7)":C.lila.solid,marginTop:4}}/>}
+                </button>
+              );
+            })}
+          </div>
+          <DayDetail date={selD}/>
+        </div>
+      );
+
+      const MonthView=()=>{
+        const cells=monthCells(mBase.y,mBase.m);
+        return(
+          <div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:13}}>
+              <button onClick={()=>setMBase(({y,m})=>m===0?{y:y-1,m:11}:{y,m:m-1})} style={{background:"none",border:"none",cursor:"pointer",color:C.bordo.solid,fontWeight:700,fontSize:18,padding:"8px 12px",minHeight:44}}>‹</button>
+              <span style={{fontSize:15,fontWeight:800,color:dtxt,textTransform:"capitalize"}}>{MONTHS[mBase.m]} {mBase.y}</span>
+              <button onClick={()=>setMBase(({y,m})=>m===11?{y:y+1,m:0}:{y,m:m+1})} style={{background:"none",border:"none",cursor:"pointer",color:C.bordo.solid,fontWeight:700,fontSize:18,padding:"8px 12px",minHeight:44}}>›</button>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:4}}>
+              {["Lu","Ma","Mi","Ju","Vi","Sa","Do"].map(d=><div key={d} style={{textAlign:"center",fontSize:11,fontWeight:700,color:dmut,padding:"4px 0"}}>{d}</div>)}
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2}}>
+              {cells.map((d,i)=>{
+                if(!d)return <div key={i}/>;
+                const ds=fmt(d),isTod=ds===TODAY,isSel=ds===selD;
+                const evs=getEventsForDate(ds),tas=tasks.filter(t=>t.date===ds&&!t.done);
+                return(
+                  <button key={i} onClick={()=>{setSelD(ds);setCalV("week");setWBase(d);}} style={{padding:"5px 2px",borderRadius:10,border:`1.5px solid ${isSel?C.bordo.border:isTod?C.naranja.border:"transparent"}`,background:isSel?C.bordo.light:dsurf,cursor:"pointer",minHeight:52,display:"flex",flexDirection:"column",alignItems:"center",gap:2,width:"100%"}}>
+                    <span style={{fontSize:14,fontWeight:isTod||isSel?800:500,color:isSel?C.bordo.solid:isTod?C.naranja.solid:dtxt}}>{d.getDate()}</span>
+                    <div style={{display:"flex",gap:2,flexWrap:"wrap",justifyContent:"center"}}>
+                      {evs.slice(0,2).map((e,ei)=>{const c=P.cats[e.cat]||P.cats.personal;return <span key={ei} style={{width:6,height:6,borderRadius:"50%",background:c.dot}}/>;})}{tas.length>0&&<span style={{width:6,height:6,borderRadius:"50%",background:C.lila.solid}}/>}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            <p style={{fontSize:12,color:dmut,textAlign:"center",marginTop:10}}>Tocá un día para ver el detalle</p>
+          </div>
+        );
+      };
+
+      const TasksView=()=>{
+        const cats=["todas",...Object.keys(CAT_ICONS)];
+        const fil=tasks.filter(t=>fcat==="todas"||t.cat===fcat);
+        return(
+          <div>
+            <div style={{display:"flex",gap:7,overflowX:"auto",paddingBottom:6,marginBottom:15}}>
+              {cats.map(c=><button key={c} onClick={()=>setFcat(c)} style={{flex:"0 0 auto",padding:"8px 14px",borderRadius:20,border:`1.5px solid ${fcat===c?C.lila.border:P.border}`,cursor:"pointer",background:fcat===c?C.lila.light:dsurf,color:fcat===c?C.lila.text:dmut,fontSize:13,fontWeight:700,minHeight:40}}>{c==="todas"?"Todas":`${CAT_ICONS[c]} ${c}`}</button>)}
+            </div>
+            <p style={{fontSize:12,fontWeight:700,color:dmut,textTransform:"uppercase",letterSpacing:.8,margin:"0 0 9px"}}>Pendientes · {fil.filter(t=>!t.done).length}</p>
+            {fil.filter(t=>!t.done).length===0?<Empty t="Sin tareas pendientes"/>:fil.filter(t=>!t.done).map(t=><TaRow key={t.id} t={t} onToggle={()=>togTa(t.id)} onResched={()=>{setResT(t);setModal("resched");}} onConv={()=>conv2ev(t)} onEdit={()=>openEditTa(t)}/>)}
+            {fil.filter(t=>t.done).length>0&&<><p style={{fontSize:12,fontWeight:700,color:dmut,textTransform:"uppercase",letterSpacing:.8,margin:"18px 0 9px"}}>Completadas · {fil.filter(t=>t.done).length}</p>{fil.filter(t=>t.done).map(t=><TaRow key={t.id} t={t} onToggle={()=>togTa(t.id)} onResched={()=>{setResT(t);setModal("resched");}} onConv={()=>conv2ev(t)} onEdit={()=>openEditTa(t)}/>)}</>}
+          </div>
+        );
+      };
+
+      const ShopView=()=>{
+        const items=curList?.items||[],pend=items.filter(s=>!s.done),done=items.filter(s=>s.done);
+        return(
+          <div>
+            <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:6,marginBottom:14,alignItems:"center"}}>
+              {shopLists.map(l=>(
+                <div key={l.id} style={{display:"flex",alignItems:"center",gap:3,flex:"0 0 auto"}}>
+                  <button onClick={()=>setActiveList(l.id)} style={{padding:"8px 14px",borderRadius:20,border:`1.5px solid ${activeList===l.id?C.verde.border:P.border}`,cursor:"pointer",background:activeList===l.id?C.verde.light:dsurf,color:activeList===l.id?C.verde.text:dmut,fontSize:13,fontWeight:700,minHeight:40}}>{l.name}</button>
+                  {activeList===l.id&&<button onClick={()=>{setEditShList(l.id);setEditListName(l.name);setModal("shEditList");}} style={{background:"none",border:"none",cursor:"pointer",fontSize:16,color:dmut,padding:"0 4px",minWidth:32,minHeight:32,display:"flex",alignItems:"center",justifyContent:"center"}}>✏️</button>}
+                </div>
+              ))}
+              <button onClick={()=>setModal("shList")} style={{flex:"0 0 auto",padding:"8px 14px",borderRadius:20,border:`1.5px dashed ${P.border}`,background:"transparent",color:dmut,fontSize:13,fontWeight:700,cursor:"pointer",minHeight:40}}>+ Nueva</button>
+            </div>
+            <div style={{background:C.verde.light,borderRadius:16,padding:"13px 16px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div><p style={{margin:0,fontSize:26,fontWeight:800,color:C.verde.text}}>{pend.length}</p><p style={{margin:"2px 0 0",fontSize:13,color:C.verde.text,fontWeight:600}}>pendientes · {curList?.name}</p></div>
+              <div style={{display:"flex",gap:8}}>
+                {done.length>0&&<button onClick={clearDone} style={{background:P.surf,border:`1px solid ${P.border}`,borderRadius:10,padding:"8px 12px",cursor:"pointer",fontSize:12,fontWeight:700,color:P.muted,minHeight:36}}>Limpiar ✓</button>}
+                <button onClick={clearAll} style={{background:P.surf,border:`1px solid ${C.bordo.border}`,borderRadius:10,padding:"8px 12px",cursor:"pointer",fontSize:12,fontWeight:700,color:C.bordo.solid,minHeight:36}}>Blanquear</button>
+              </div>
+            </div>
+            {pend.map(s=><ShRow key={s.id} s={s} onToggle={()=>togShI(activeList,s.id)} onEdit={()=>openEditShItem(activeList,s)}/>)}
+            {done.length>0&&<><p style={{fontSize:12,fontWeight:700,color:dmut,textTransform:"uppercase",letterSpacing:.8,margin:"16px 0 8px"}}>Comprado ✓</p>{done.map(s=><ShRow key={s.id} s={s} onToggle={()=>togShI(activeList,s.id)} onEdit={()=>openEditShItem(activeList,s)}/>)}</>}
+          </div>
+        );
+      };
+
+      const WellView=()=>(
+        <div>
+          <div style={{background:`linear-gradient(135deg,${C.verde.light},${C.lila.light})`,borderRadius:20,padding:"20px 18px",marginBottom:18,textAlign:"center"}}>
+            <span style={{fontSize:34}}>🌿</span>
+            <h2 style={{margin:"8px 0 3px",fontWeight:800,fontSize:20,color:P.text}}>Tu bienestar</h2>
+            <p style={{margin:"0 0 14px",fontSize:13,color:P.muted}}>{wlog.length} registros guardados</p>
+            <button onClick={()=>setModal("wl")} style={{...SAVE,width:"auto",padding:"11px 26px",display:"inline-block"}}>+ Nuevo registro</button>
+          </div>
+          {wlog.length===0?<Empty t="Aún no hay registros"/>:[...wlog].reverse().map(w=>(
+            <div key={w.id} style={{background:dsurf,borderRadius:16,padding:15,marginBottom:11,border:`1px solid ${dbdr}`}}>
+              <p style={{margin:"0 0 9px",fontSize:14,fontWeight:700,color:dtxt}}>{w.date}</p>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                {w.sleep&&<Chip label={`💤 ${w.sleep}h`} bg={C.lila.light} col={C.lila.text}/>}
+                {w.weight&&<Chip label={`⚖️ ${w.weight}kg`} bg={C.naranja.light} col={C.naranja.text}/>}
+                {w.energy&&<Chip label={`⚡ ${w.energy}/10`} bg={C.verde.light} col={C.verde.text}/>}
+                {w.humor&&<Chip label={w.humor} bg={C.lila.light} col={C.lila.text}/>}
+                {w.migraine&&w.migraine!=="No"&&<Chip label={`🤕 ${w.migraine}${w.migraineHours?" "+w.migraineHours+"h":""}`} bg={C.bordo.light} col={C.bordo.text}/>}
+                {w.digestion&&<Chip label={w.digestion} bg={C.naranja.light} col={C.naranja.text}/>}
+                {w.agua&&<Chip label={`💧 ${w.agua} YETI`} bg={C.verde.light} col={C.verde.text}/>}
+                {w.musculacion&&<Chip label={`💪 ${w.musculacionMins}min`} bg={C.verde.light} col={C.verde.text}/>}
+                {w.cinta&&<Chip label={`🏃 ${w.cintaMins}min`} bg={C.verde.light} col={C.verde.text}/>}
+                {w.mary&&<Chip label="Mary ✓" bg={C.verde.light} col={C.verde.text}/>}
+              </div>
+              {[0,1,2,3,4,5,6,7,8,9].some(i=>w[`med${i}`])&&<p style={{margin:"8px 0 0",fontSize:12,color:dmut}}>💊 {[0,1,2,3,4,5,6,7,8,9].map(i=>w[`med${i}`]).filter(Boolean).join(", ")}</p>}
+              {w.notes&&<p style={{margin:"8px 0 0",fontSize:12,color:dmut,fontStyle:"italic"}}>{w.notes}</p>}
+            </div>
+          ))}
+        </div>
+      );
+
+      return(
+        <div style={{fontFamily:FONT,background:dbg,minHeight:"100vh",maxWidth:480,margin:"0 auto",color:dtxt,paddingBottom:90}}>
+          {syncMsg&&<div style={{position:"fixed",top:0,left:"50%",transform:"translateX(-50%)",background:C.verde.solid,color:"#FFF",padding:"8px 20px",borderRadius:"0 0 14px 14px",fontSize:13,fontWeight:700,zIndex:2000,whiteSpace:"nowrap"}}>{syncMsg}</div>}
+          {loading&&<div style={{position:"fixed",inset:0,background:"rgba(250,248,245,.92)",zIndex:1500,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:14}}>
+            <span style={{fontSize:48}}>🌻</span>
+            <p style={{fontSize:15,fontWeight:700,color:P.muted}}>Cargando tu agenda...</p>
+          </div>}
+
+          <div style={{padding:"20px 20px 0",display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+            <div>
+              <p style={{margin:0,fontSize:13,color:dmut,fontWeight:600,letterSpacing:.5}}>{DAYS[now.getDay()]}, {now.getDate()} de {MONTHS[now.getMonth()]}</p>
+              <h1 style={{margin:"2px 0 0",fontSize:28,fontWeight:800,lineHeight:1.2}}>Hola, Lulu 🌻</h1>
+            </div>
+            <div style={{display:"flex",gap:8,marginTop:4}}>
+              <button onClick={cargarTodo} style={{background:dsurf,border:`1.5px solid ${dbdr}`,borderRadius:12,width:42,height:42,cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center"}}>🔄</button>
+              <button onClick={()=>setModal("search")} style={{background:dsurf,border:`1.5px solid ${dbdr}`,borderRadius:12,width:42,height:42,cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center"}}>🔍</button>
+              <button onClick={()=>setDark(d=>!d)} style={{background:dsurf,border:`1.5px solid ${dbdr}`,borderRadius:12,width:42,height:42,cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center"}}>{dark?"☀️":"🌙"}</button>
+            </div>
+          </div>
+
+          <div style={{padding:"16px 18px 0"}}>
+            {tab==="home"&&<HomeView/>}
+            {tab==="cal"&&<CalView/>}
+            {tab==="tasks"&&<TasksView/>}
+            {tab==="shop"&&<ShopView/>}
+            {tab==="well"&&<WellView/>}
+          </div>
+
+          <button onClick={()=>tab==="well"?setModal("wl"):tab==="shop"?openNewShItem():tab==="tasks"?openNewTa():openNewEv()} style={{position:"fixed",bottom:86,right:18,width:56,height:56,borderRadius:"50%",background:`linear-gradient(135deg,${C.lila.solid},#9878C8)`,border:"none",color:"#FFF",fontSize:26,cursor:"pointer",boxShadow:`0 4px 20px rgba(123,94,167,.4)`,display:"flex",alignItems:"center",justifyContent:"center",zIndex:100}}>+</button>
+
+          <button onClick={()=>setModal("ib")} style={{position:"fixed",bottom:86,left:18,background:dsurf,border:`1.5px solid ${dbdr}`,borderRadius:26,padding:"10px 16px",cursor:"pointer",fontSize:13,fontWeight:700,color:dmut,display:"flex",alignItems:"center",gap:5,boxShadow:"0 2px 12px rgba(45,37,32,.08)",zIndex:100}}>📬 Inbox</button>
+
+          <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:dsurf,borderTop:`1px solid ${dbdr}`,display:"flex",justifyContent:"space-around",padding:"10px 0 20px",zIndex:200}}>
+            {navItems.map(n=>(
+              <button key={n.k} onClick={()=>setTab(n.k)} style={{background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3,opacity:tab===n.k?1:.4,minWidth:50,minHeight:50,justifyContent:"center"}}>
+                <span style={{fontSize:22}}>{n.i}</span>
+                <span style={{fontSize:10,fontWeight:700,color:tab===n.k?C.bordo.solid:dmut}}>{n.l}</span>
+                {tab===n.k&&<span style={{width:4,height:4,borderRadius:"50%",background:C.bordo.solid}}/>}
+              </button>
+            ))}
+          </div>
+
+          {modal==="ev"&&<Modal title={editEv?"Editar evento":"Nuevo evento"} onClose={()=>{setModal(null);setEditEv(null);}}>
+            <Lbl t="Título"><input style={INP} value={ev0.title} onChange={e=>setEv0(p=>({...p,title:e.target.value}))} placeholder="¿Qué tenés?"/></Lbl>
+            <Lbl t="Fecha"><input type="date" style={INP} value={ev0.date} onChange={e=>setEv0(p=>({...p,date:e.target.value}))}/></Lbl>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <Lbl t="Hora inicio"><input type="time" style={INP} value={ev0.timeS} onChange={e=>setEv0(p=>({...p,timeS:e.target.value}))}/></Lbl>
+              <Lbl t="Hora fin"><input type="time" style={INP} value={ev0.timeE} onChange={e=>setEv0(p=>({...p,timeE:e.target.value}))}/></Lbl>
+            </div>
+            {ev0.timeS&&ev0.timeE&&toMins(ev0.timeE)>toMins(ev0.timeS)&&<div style={{background:C.verde.light,borderRadius:10,padding:"9px 12px",marginBottom:10,fontSize:13,color:C.verde.text,fontWeight:700}}>⏱️ Duración: {(()=>{const m=toMins(ev0.timeE)-toMins(ev0.timeS);return m>=60?`${Math.floor(m/60)}h${m%60>0?" "+m%60+"min":""}`:`${m}min`;})()}</div>}
+            {hasConflict(events,ev0)&&<div style={{background:C.bordo.light,borderRadius:10,padding:"9px 12px",marginBottom:10,fontSize:13,color:C.bordo.text,fontWeight:700}}>⚠️ Este horario se superpone con otro evento</div>}
+            <Lbl t="Tiempo de viaje"><SegBtn options={["0","10","15","20","30","45","60"]} val={String(ev0.travel)} onChange={v=>setEv0(p=>({...p,travel:Number(v)}))}/></Lbl>
+            <Lbl t="Categoría"><select style={SEL} value={ev0.cat} onChange={e=>setEv0(p=>({...p,cat:e.target.value}))}>{Object.keys(CAT_ICONS).map(c=><option key={c} value={c}>{CAT_ICONS[c]} {c}</option>)}</select></Lbl>
+            <Lbl t="Repetición"><select style={SEL} value={ev0.rep} onChange={e=>setEv0(p=>({...p,rep:e.target.value}))}><option value="none">Sin repetición</option><option value="weekly">Semanal</option></select></Lbl>
+            <Lbl t="Notas"><textarea style={{...INP,minHeight:72,resize:"none"}} value={ev0.notes} onChange={e=>setEv0(p=>({...p,notes:e.target.value}))} placeholder="Notas opcionales..."/></Lbl>
+            {saving?<Spinner/>:<button onClick={saveEv} style={SAVE}>{editEv?"Guardar cambios":"Guardar evento"}</button>}
+            {editEv&&!saving&&<button onClick={deleteEv} style={DEL}>Eliminar evento</button>}
+          </Modal>}
+
+          {modal==="ta"&&<Modal title={editTa?"Editar tarea":"Nueva tarea"} onClose={()=>{setModal(null);setEditTa(null);}}>
+            <Lbl t="Tarea"><input style={INP} value={ta0.title} onChange={e=>setTa0(p=>({...p,title:e.target.value}))} placeholder="¿Qué tenés que hacer?"/></Lbl>
+            <Lbl t="Fecha"><input type="date" style={INP} value={ta0.date} onChange={e=>setTa0(p=>({...p,date:e.target.value}))}/></Lbl>
+            <Lbl t="Categoría"><select style={SEL} value={ta0.cat} onChange={e=>setTa0(p=>({...p,cat:e.target.value}))}>{Object.keys(CAT_ICONS).map(c=><option key={c} value={c}>{CAT_ICONS[c]} {c}</option>)}</select></Lbl>
+            <Lbl t="Prioridad"><SegBtn options={["Normal","Alta ⚡"]} val={ta0.hi?"Alta ⚡":"Normal"} onChange={v=>setTa0(p=>({...p,hi:v==="Alta ⚡"}))}/></Lbl>
+            <Lbl t="Notas"><textarea style={{...INP,minHeight:72,resize:"none"}} value={ta0.notes} onChange={e=>setTa0(p=>({...p,notes:e.target.value}))} placeholder="Notas..."/></Lbl>
+            {saving?<Spinner/>:<button onClick={saveTa} style={SAVE}>{editTa?"Guardar cambios":"Guardar tarea"}</button>}
+            {editTa&&!saving&&<button onClick={deleteTa} style={DEL}>Eliminar tarea</button>}
+          </Modal>}
+
+          {modal==="ib"&&<Modal title="📬 Captura rápida" onClose={()=>setModal(null)}>
+            <Lbl t="¿Qué querés guardar?"><textarea style={{...INP,minHeight:110,resize:"none"}} value={ib0} onChange={e=>setIb0(e.target.value)} placeholder="Ideas, pendientes, notas, lo que sea..."/></Lbl>
+            {saving?<Spinner/>:<button onClick={saveIb} style={SAVE}>Guardar en inbox</button>}
+          </Modal>}
+
+          {modal==="shItem"&&<Modal title={editShItem?"Editar ítem":"Nuevo ítem"} onClose={()=>{setModal(null);setEditShItem(null);}}>
+            <Lbl t="¿Qué necesitás?"><input style={INP} value={shItemForm.item} onChange={e=>setShItemForm(p=>({...p,item:e.target.value}))} placeholder="Producto..."/></Lbl>
+            {shItemForm.listId==="general"&&<Lbl t="Categoría"><select style={SEL} value={shItemForm.cat||"compras"} onChange={e=>setShItemForm(p=>({...p,cat:e.target.value}))}>{Object.keys(CAT_ICONS).map(c=><option key={c} value={c}>{CAT_ICONS[c]} {c}</option>)}</select></Lbl>}
+            <Lbl t="Notas"><input style={INP} value={shItemForm.notes} onChange={e=>setShItemForm(p=>({...p,notes:e.target.value}))} placeholder="Marca, cantidad..."/></Lbl>
+            {saving?<Spinner/>:<button onClick={saveShItem} style={SAVE}>{editShItem?"Guardar cambios":"Agregar a lista"}</button>}
+            {editShItem&&!saving&&<button onClick={deleteShItem} style={DEL}>Eliminar ítem</button>}
+          </Modal>}
+
+          {modal==="shList"&&<Modal title="Nueva lista de compras" onClose={()=>setModal(null)}>
+            <Lbl t="Nombre del lugar o lista"><input style={INP} value={newListName} onChange={e=>setNewListName(e.target.value)} placeholder="ej: Farmacia, Verdulería..."/></Lbl>
+            <button onClick={saveNewList} style={{...SAVE,background:`linear-gradient(135deg,${C.verde.solid},#6AAA88)`}}>Crear lista</button>
+          </Modal>}
+
+          {modal==="shEditList"&&<Modal title="Editar lista" onClose={()=>{setModal(null);setEditShList(null);}}>
+            <Lbl t="Nombre de la lista"><input style={INP} value={editListName} onChange={e=>setEditListName(e.target.value)}/></Lbl>
+            <button onClick={saveEditList} style={SAVE}>Guardar nombre</button>
+            {editShList!=="general"&&<button onClick={deleteList} style={DEL}>Eliminar lista</button>}
+          </Modal>}
+
+          {modal==="wl"&&<Modal title="🌿 Registro de bienestar" onClose={()=>setModal(null)}>
+            <WellnessForm wl0={wl0} setWl0={setWl0} onSave={saveWl} saving={saving} lastMeds={lastWlog}/>
+          </Modal>}
+
+          {modal==="search"&&<Modal title="🔍 Buscar" onClose={()=>{setModal(null);setSq("");}}>
+            <input style={{...INP,marginBottom:14}} value={sq} onChange={e=>setSq(e.target.value)} placeholder="Buscá eventos, tareas, notas..."/>
+            {sq.length>1&&searchRes.length===0&&<Empty t={`Sin resultados para "${sq}"`}/>}
+            {searchRes.map((r,i)=>(
+              <div key={i} style={{background:P.sAlt,borderRadius:12,padding:"12px 14px",marginBottom:8}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                  <span style={{fontSize:14,fontWeight:700,color:P.text}}>{r.title||r.text}</span>
+                  <span style={{fontSize:11,background:P.surf,padding:"2px 8px",borderRadius:20,color:P.muted}}>{r._k}</span>
+                </div>
+                {r.date&&<p style={{margin:"2px 0 0",fontSize:12,color:P.muted}}>{r.date}</p>}
+                {r.cat&&<CatTag cat={r.cat} sm/>}
+              </div>
+            ))}
+          </Modal>}
+
+          {modal==="resched"&&resT&&<Modal title="¿Para cuándo?" onClose={()=>{setResT(null);setModal(null);}}>
+            <p style={{fontSize:15,fontWeight:700,color:P.text,marginBottom:14}}>"{resT.title}"</p>
+            <Lbl t="Nueva fecha"><input type="date" style={INP} defaultValue={resT.date} onChange={e=>doResched(resT.id,e.target.value)}/></Lbl>
+          </Modal>}
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<LuluAgenda/>);
+  </script>
+</body>
+</html>
