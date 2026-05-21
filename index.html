@@ -826,7 +826,6 @@ function LuluAgenda(){
           {w.notes&&<p style={{margin:"8px 0 0",fontSize:12,color:dmut,fontStyle:"italic"}}>{w.notes}</p>}
         </div>
       ))}
-    </div>
   );
 
   return(
@@ -891,7 +890,7 @@ function LuluAgenda(){
           ))}
         </div>
 
-      {/* MODALES */}
+        {/* MODALES */}
       {modal==="ev"&&<Modal title={editEv?"Editar evento":"Nuevo evento"} onClose={()=>{setModal(null);setEditEv(null);}}>
         <Lbl t="Título"><input style={INP} value={ev0.title} onChange={e=>setEv0(p=>({...p,title:e.target.value}))} placeholder="¿Qué tenés?"/></Lbl>
         <Lbl t="Fecha"><input type="date" style={INP} value={ev0.date} onChange={e=>setEv0(p=>({...p,date:e.target.value}))}/></Lbl>
@@ -968,8 +967,7 @@ function LuluAgenda(){
         <p style={{fontSize:15,fontWeight:700,color:P.text,marginBottom:14}}>"{resT.title}"</p>
         <Lbl t="Nueva fecha"><input type="date" style={INP} defaultValue={resT.date} onChange={e=>doResched(resT.id,e.target.value)}/></Lbl>
       </Modal>}
-    </div>{/* app-main */}
-    </div>{/* root */}
+      </div>{/* app-main */}
   );
 }
 
