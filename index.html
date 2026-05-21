@@ -13,6 +13,26 @@
     body{font-family:'Nunito',sans-serif;background:#FAF8F5;overscroll-behavior:none;}
     input,select,textarea,button{font-family:'Nunito',sans-serif;}
     input[type=range]{height:32px;}
+    @media(min-width:768px){
+      body{background:#EDE8E1;}
+      .app-sidebar{width:230px;flex-shrink:0;position:fixed;top:0;left:0;height:100vh;background:#fff;border-right:1.5px solid #EDE8E1;display:flex;flex-direction:column;padding:28px 14px 24px;gap:4px;z-index:300;}
+      .app-sidebar .brand{font-size:19px;font-weight:800;color:#2D2520;margin-bottom:16px;padding:0 10px;}
+      .app-sidebar .snav{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;border:none;background:transparent;cursor:pointer;font-size:14px;font-weight:700;color:#9A8E85;text-align:left;width:100%;font-family:'Nunito',sans-serif;}
+      .app-sidebar .snav:hover{background:#F5F0EB;}
+      .app-sidebar .snav.on{background:#F5E6EA;color:#A0485A;}
+      .app-sidebar .snav .si{font-size:18px;width:22px;text-align:center;}
+      .app-sidebar .sbot{margin-top:auto;display:flex;flex-direction:column;gap:8px;}
+      .app-main{margin-left:230px;flex:1;max-width:700px;padding:28px 36px 80px;}
+      .app-topbar{display:none !important;}
+      .app-bottomnav{display:none !important;}
+      .app-fab{bottom:32px !important;right:36px !important;}
+      .app-inbox{bottom:32px !important;left:270px !important;}
+      .app-content{padding:0 !important;}
+    }
+    @media(max-width:767px){
+      .app-sidebar{display:none;}
+      .app-main{margin-left:0;max-width:100%;padding:0;}
+    }
   </style>
 </head>
 <body>
@@ -47,7 +67,8 @@ const CAT_ICONS={salud:"🌿",ens:"📖",fundacion:"🏛️",amigas:"🤍",compr
 const DAYS=["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
 const MONTHS=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 const now=new Date();
-const fmt=d=>d.toISOString().slice(0,10);
+// Usa hora local (Argentina GMT-3) en lugar de UTC para evitar desfase de un día
+const fmt=d=>{const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,"0"),dd=String(d.getDate()).padStart(2,"0");return `${y}-${m}-${dd}`;};
 const shift=(d,n)=>{const r=new Date(d);r.setDate(r.getDate()+n);return r;};
 const TODAY=fmt(now);
 const toMins=t=>{if(!t)return 0;const[h,m]=t.split(":").map(Number);return h*60+m;};
@@ -253,34 +274,13 @@ function WellnessForm({wl0,setWl0,onSave,saving,lastMeds}){
 }
 
 // ── Menú semanal ──────────────────────────────────────────────────────────────
-function MenuModal({wdays,menuData,setMenuData,comidaList,setComidaList,onClose,onSave,saving}){
-  const [newComida,setNewComida]=useState("");
+function MenuModal({wdays,menuData,setMenuData,onClose,onSave,saving}){
   const dias=["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
-
   function setMeal(dateStr,tipo,val){
     setMenuData(p=>({...p,[dateStr]:{...p[dateStr],[tipo]:val}}));
   }
-  function addComida(){
-    if(!newComida.trim())return;
-    setComidaList(p=>[...new Set([...p,newComida.trim()])]);
-    setNewComida("");
-  }
-
   return(
     <Modal title="🍲 Menú semanal" onClose={onClose}>
-      {/* Lista de comidas */}
-      <div style={{background:C.verde.light,borderRadius:14,padding:"12px 14px",marginBottom:18}}>
-        <p style={{fontSize:12,fontWeight:800,color:C.verde.text,marginBottom:8,textTransform:"uppercase",letterSpacing:.8}}>📋 Lista de comidas</p>
-        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
-          {comidaList.map(c=><span key={c} style={{background:P.surf,border:`1px solid ${C.verde.border}`,borderRadius:20,padding:"4px 10px",fontSize:12,color:C.verde.text,fontWeight:600}}>{c}</span>)}
-        </div>
-        <div style={{display:"flex",gap:8}}>
-          <input style={{...INP,flex:1,fontSize:14}} value={newComida} onChange={e=>setNewComida(e.target.value)} placeholder="Agregar comida a la lista..." onKeyDown={e=>e.key==="Enter"&&addComida()}/>
-          <button onClick={addComida} style={{background:C.verde.solid,border:"none",borderRadius:12,padding:"0 16px",color:"#FFF",fontWeight:700,cursor:"pointer",fontSize:18,minHeight:44}}>+</button>
-        </div>
-      </div>
-
-      {/* Días */}
       {wdays.map((d,i)=>{
         const ds=fmt(d);
         const menu=menuData[ds]||{};
@@ -288,17 +288,11 @@ function MenuModal({wdays,menuData,setMenuData,comidaList,setComidaList,onClose,
           <div key={ds} style={{background:P.sAlt,borderRadius:14,padding:"12px 14px",marginBottom:10}}>
             <p style={{fontSize:13,fontWeight:800,color:P.text,marginBottom:10}}>{dias[i]} {d.getDate()} de {MONTHS[d.getMonth()]}</p>
             <Lbl t="☀️ Almuerzo">
-              <select style={SEL} value={menu.almuerzo||""} onChange={e=>setMeal(ds,"almuerzo",e.target.value)}>
-                <option value="">— elegir —</option>
-                {comidaList.map(c=><option key={c} value={c}>{c}</option>)}
-              </select>
+              <input style={INP} value={menu.almuerzo||""} onChange={e=>setMeal(ds,"almuerzo",e.target.value)} placeholder="¿Qué vas a almorzar?"/>
               <input style={{...INP,marginTop:6,fontSize:14}} value={menu.almuerzoCom||""} onChange={e=>setMeal(ds,"almuerzoCom",e.target.value)} placeholder="Complemento / detalle..."/>
             </Lbl>
             <Lbl t="🌙 Cena">
-              <select style={SEL} value={menu.cena||""} onChange={e=>setMeal(ds,"cena",e.target.value)}>
-                <option value="">— elegir —</option>
-                {comidaList.map(c=><option key={c} value={c}>{c}</option>)}
-              </select>
+              <input style={INP} value={menu.cena||""} onChange={e=>setMeal(ds,"cena",e.target.value)} placeholder="¿Qué vas a cenar?"/>
               <input style={{...INP,marginTop:6,fontSize:14}} value={menu.cenaCom||""} onChange={e=>setMeal(ds,"cenaCom",e.target.value)} placeholder="Complemento / detalle..."/>
             </Lbl>
           </div>
@@ -322,8 +316,9 @@ function LuluAgenda(){
   const [inbox,setInbox]=useState([]);
   const [shopLists,setShopLists]=useState([{id:"general",name:"General",items:[]},{id:"coto",name:"Coto",items:[]},{id:"mayorista",name:"Mayorista",items:[]}]);
   const [wlog,setWlog]=useState([]);
-  const [menuData,setMenuData]=useState({});// {dateStr:{almuerzo,cena,...}}
-  const [comidaList,setComidaList]=useState(["Milanesa","Pasta","Arroz","Ensalada","Pollo","Sopa","Pizza","Tarta","Hamburguesa","Verduras salteadas"]);
+  const [menuData,setMenuData]=useState(()=>{
+    try{const s=localStorage.getItem("lulu_menu");return s?JSON.parse(s):{};}catch{return {};}
+  });
 
   const [wBase,setWBase]=useState(new Date());
   const [mBase,setMBase]=useState({y:now.getFullYear(),m:now.getMonth()});
@@ -355,7 +350,20 @@ function LuluAgenda(){
   const dbg=dark?"#1A1614":P.bg;
   const wdays=weekOf(wBase);
 
+  // Persistir menú en localStorage para que no se pierda al cerrar
+  useEffect(()=>{
+    try{localStorage.setItem("lulu_menu",JSON.stringify(menuData));}catch{}
+  },[menuData]);
+
   useEffect(()=>{cargarTodo();},[]);
+
+  // Auto-refresh: cada 5 minutos y al volver a la pestaña/app
+  useEffect(()=>{
+    const interval=setInterval(()=>cargarTodo(),5*60*1000);
+    const onVisible=()=>{if(document.visibilityState==="visible")cargarTodo();};
+    document.addEventListener("visibilitychange",onVisible);
+    return()=>{clearInterval(interval);document.removeEventListener("visibilitychange",onVisible);};
+  },[]);
 
   // ── Carga desde Sheets ────────────────────────────────────────────────────
   async function cargarTodo(){
@@ -370,7 +378,7 @@ function LuluAgenda(){
           timeE:String(e["Hora Fin"]||""),
           travel:Number(e["Tiempo Viaje (min)"])||0,
           date:String(e["Fecha"]||""),
-          cat:String(e["Categoría"]||"personal").toLowerCase(),
+          cat:String(e["Categoría"]||"personal").toLowerCase().trim(),
           rep:String(e["Repetición"]||"none"),
           notes:String(e["Notas"]||""),
           done:e["Hecho"]==="TRUE"||e["Hecho"]===true,
@@ -379,25 +387,41 @@ function LuluAgenda(){
           id:String(t["ID"]||""),
           title:String(t["Título"]||""),
           date:String(t["Fecha"]||""),
-          cat:String(t["Categoría"]||"personal").toLowerCase(),
+          cat:String(t["Categoría"]||"personal").toLowerCase().trim(),
           notes:String(t["Notas"]||""),
           done:t["Hecho"]==="TRUE"||t["Hecho"]===true,
           hi:t["Prioridad Alta"]==="TRUE"||t["Prioridad Alta"]===true,
         })));
         if(r.bienestar?.length)setWlog(r.bienestar.map(w=>({
-          id:String(w["ID"]||""),date:String(w["Fecha"]||""),
-          sleep:w["Horas Sueño"],sleepQ:w["Calidad Sueño"],weight:w["Peso"],
-          migraine:w["Migraña"]||"No",migraineHours:w["Horas Migraña"],
-          digestion:w["Digestión"],bano:String(w["Baño"]||""),
-          energy:w["Energía"],humor:w["Humor"],relax:w["Relax (min)"],
-          musculacion:w["Musculación"]==="TRUE",musculacionMins:w["Minutos Musculación"],
-          cinta:w["Cinta"]==="TRUE",cintaMins:w["Minutos Cinta"],
-          mary:w["Mary"]==="TRUE",otraActividad:w["Otra Actividad"],
-          otraActividadMins:w["Minutos Otra Actividad"],ocupacion:w["Ocupación"],
-          comidas:w["Comidas"],huevos:w["Huevos"]==="TRUE",agua:w["Agua YETI"],
-          med0:w["Med1"],med1:w["Med2"],med2:w["Med3"],med3:w["Med4"],med4:w["Med5"],
-          med5:w["Med6"],med6:w["Med7"],med7:w["Med8"],med8:w["Med9"],med9:w["Med10"],
-          notes:w["Notas"],
+          id:String(w["ID"]||""),
+          date:String(w["Fecha"]||""),
+          sleep:String(w["Horas Sueño"]||""),
+          sleepQ:String(w["Calidad Sueño"]||""),
+          weight:String(w["Peso"]||""),
+          migraine:String(w["Migraña"]||"No"),
+          migraineHours:String(w["Horas Migraña"]||""),
+          digestion:String(w["Digestión"]||""),
+          bano:String(w["Baño"]||""),
+          energy:w["Energía"]||5,
+          humor:String(w["Humor"]||""),
+          relax:String(w["Relax (min)"]||""),
+          musculacion:w["Musculación"]==="TRUE"||w["Musculación"]===true,
+          musculacionMins:String(w["Minutos Musculación"]||""),
+          cinta:w["Cinta"]==="TRUE"||w["Cinta"]===true,
+          cintaMins:String(w["Minutos Cinta"]||""),
+          mary:w["Mary"]==="TRUE"||w["Mary"]===true,
+          otraActividad:String(w["Otra Actividad"]||""),
+          otraActividadMins:String(w["Minutos Otra Actividad"]||""),
+          ocupacion:String(w["Ocupación"]||""),
+          comidas:String(w["Comidas"]||""),
+          huevos:w["Huevos"]==="TRUE"||w["Huevos"]===true,
+          agua:String(w["Agua YETI"]||""),
+          med0:String(w["Med1"]||""),med1:String(w["Med2"]||""),
+          med2:String(w["Med3"]||""),med3:String(w["Med4"]||""),
+          med4:String(w["Med5"]||""),med5:String(w["Med6"]||""),
+          med6:String(w["Med7"]||""),med7:String(w["Med8"]||""),
+          med8:String(w["Med9"]||""),med9:String(w["Med10"]||""),
+          notes:String(w["Notas"]||""),
         })));
         if(r.comprasGeneral?.length){
           const items=r.comprasGeneral.map(s=>({id:String(s["ID"]||""),item:String(s["Ítem"]||""),cat:String(s["Categoría"]||"compras").toLowerCase(),done:s["Hecho"]==="TRUE"||s["Hecho"]===true,notes:String(s["Notas"]||"")}));
@@ -410,8 +434,8 @@ function LuluAgenda(){
         }
         if(r.inbox?.length)setInbox(r.inbox.map(i=>({id:String(i["ID"]||""),text:String(i["Texto"]||""),date:String(i["Fecha"]||"")})));
         showSync("✅ Sincronizado con Google Sheets");
-      }else{showSync("⚠️ "+( r.error||"Error al cargar"));}
-    }catch(e){showSync("⚠️ Sin conexión — modo local");}
+      }else{showSync("⚠️ "+(r.error||"Error al cargar"));}
+    }catch(e){showSync("⚠️ Sin conexión — mostrando datos guardados");}
     setLoading(false);
   }
 
@@ -432,16 +456,27 @@ function LuluAgenda(){
   function openNewEv(){setEv0({title:"",timeS:"",timeE:"",travel:0,date:selD,cat:"personal",rep:"none",notes:""});setEditEv(null);setModal("ev");}
   function openEditEv(ev){setEv0({...ev});setEditEv(ev.id);setModal("ev");}
   async function saveEv(){
-    if(!ev0.title||!ev0.timeS||!ev0.timeE)return;
+    if(!ev0.title.trim()||!ev0.timeS||!ev0.timeE)return;
     setSaving(true);
-    const datos={id:editEv||undefined,titulo:ev0.title,horaInicio:ev0.timeS,horaFin:ev0.timeE,tiempoViaje:ev0.travel,fecha:ev0.date,categoria:ev0.cat,repeticion:ev0.rep,notas:ev0.notes,hecho:false};
+    const datos={
+      id:editEv||undefined,
+      titulo:ev0.title.trim(),
+      horaInicio:ev0.timeS,
+      horaFin:ev0.timeE,
+      tiempoViaje:Number(ev0.travel)||0,
+      fecha:ev0.date,
+      categoria:ev0.cat||"personal",
+      repeticion:ev0.rep||"none",
+      notas:ev0.notes||"",
+      hecho:false
+    };
     if(editEv){
       setEvents(p=>p.map(e=>e.id===editEv?{...ev0,id:editEv}:e));
       await api("editarEvento",datos);
     }else{
       const r=await api("guardarEvento",datos);
-      const id=String(r.id||Date.now());
-      setEvents(p=>[...p,{...ev0,id,done:false}]);
+      const id=String(r.id||("ev_"+Date.now()));
+      setEvents(p=>[...p,{...ev0,title:ev0.title.trim(),cat:ev0.cat||"personal",id,done:false}]);
     }
     setSaving(false);setModal(null);setEditEv(null);showSync("✅ Evento guardado");
   }
@@ -455,16 +490,24 @@ function LuluAgenda(){
   function openNewTa(){setTa0({title:"",date:selD,cat:"personal",notes:"",hi:false});setEditTa(null);setModal("ta");}
   function openEditTa(t){setTa0({...t});setEditTa(t.id);setModal("ta");}
   async function saveTa(){
-    if(!ta0.title)return;
+    if(!ta0.title.trim())return;
     setSaving(true);
-    const datos={id:editTa||undefined,titulo:ta0.title,fecha:ta0.date,categoria:ta0.cat,notas:ta0.notes,hecho:false,prioridadAlta:ta0.hi};
+    const datos={
+      id:editTa||undefined,
+      titulo:ta0.title.trim(),
+      fecha:ta0.date,
+      categoria:ta0.cat||"personal",
+      notas:ta0.notes||"",
+      hecho:false,
+      prioridadAlta:ta0.hi
+    };
     if(editTa){
       setTasks(p=>p.map(t=>t.id===editTa?{...ta0,id:editTa}:t));
       await api("editarTarea",datos);
     }else{
       const r=await api("guardarTarea",datos);
-      const id=String(r.id||Date.now());
-      setTasks(p=>[...p,{...ta0,id,done:false}]);
+      const id=String(r.id||("ta_"+Date.now()));
+      setTasks(p=>[...p,{...ta0,title:ta0.title.trim(),cat:ta0.cat||"personal",id,done:false}]);
     }
     setSaving(false);setModal(null);setEditTa(null);showSync("✅ Tarea guardada");
   }
@@ -473,8 +516,8 @@ function LuluAgenda(){
     setTasks(p=>p.filter(t=>t.id!==editTa));
     setSaving(false);setModal(null);setEditTa(null);showSync("🗑️ Tarea eliminada");
   }
-  const togEv=async id=>{const ev=events.find(e=>e.id===id);if(!ev)return;const u={...ev,done:!ev.done};setEvents(p=>p.map(e=>e.id===id?u:e));await api("editarEvento",{id,titulo:ev.title,horaInicio:ev.timeS,horaFin:ev.timeE,tiempoViaje:ev.travel,fecha:ev.date,categoria:ev.cat,repeticion:ev.rep,notas:ev.notes,hecho:u.done});};
-  const togTa=async id=>{const t=tasks.find(t=>t.id===id);if(!t)return;const u={...t,done:!t.done};setTasks(p=>p.map(x=>x.id===id?u:x));await api("editarTarea",{id,titulo:t.title,fecha:t.date,categoria:t.cat,notas:t.notes,hecho:u.done,prioridadAlta:t.hi});};
+  const togEv=async id=>{const ev=events.find(e=>e.id===id);if(!ev)return;const u={...ev,done:!ev.done};setEvents(p=>p.map(e=>e.id===id?u:e));await api("editarEvento",{id,titulo:ev.title||"",horaInicio:ev.timeS||"",horaFin:ev.timeE||"",tiempoViaje:ev.travel||0,fecha:ev.date,categoria:ev.cat||"personal",repeticion:ev.rep||"none",notas:ev.notes||"",hecho:u.done});};
+  const togTa=async id=>{const t=tasks.find(t=>t.id===id);if(!t)return;const u={...t,done:!t.done};setTasks(p=>p.map(x=>x.id===id?u:x));await api("editarTarea",{id,titulo:t.title||"",fecha:t.date,categoria:t.cat||"personal",notas:t.notes||"",hecho:u.done,prioridadAlta:t.hi});};
   const conv2ev=async t=>{const r=await api("guardarEvento",{titulo:t.title,horaInicio:"10:00",horaFin:"11:00",tiempoViaje:0,fecha:t.date,categoria:t.cat,repeticion:"none",notas:t.notes,hecho:false});setEvents(p=>[...p,{id:String(r.id||Date.now()),title:t.title,timeS:"10:00",timeE:"11:00",travel:0,date:t.date,cat:t.cat,rep:"none",notes:t.notes,done:false}]);await api("eliminarTarea",{id:t.id});setTasks(p=>p.filter(x=>x.id!==t.id));showSync("✅ Convertido a evento");};
   const doResched=async(id,d)=>{const t=tasks.find(x=>x.id===id);if(!t)return;setTasks(p=>p.map(x=>x.id===id?{...x,date:d}:x));await api("editarTarea",{id,titulo:t.title,fecha:d,categoria:t.cat,notas:t.notes,hecho:t.done,prioridadAlta:t.hi});setResT(null);setModal(null);showSync("📆 Reprogramada");};
 
@@ -485,8 +528,37 @@ function LuluAgenda(){
   // ── Bienestar ─────────────────────────────────────────────────────────────
   const saveWl=async()=>{
     setSaving(true);
-    const r=await api("guardarBienestar",wl0);
-    const id=String(r.id||Date.now());
+    // Mapeamos los campos locales a los nombres que espera el Apps Script
+    const datos={
+      id:wlEdit||undefined,
+      fecha:wl0.date,
+      horasSueno:wl0.sleep,
+      calidadSueno:wl0.sleepQ,
+      peso:wl0.weight,
+      migrana:wl0.migraine||"No",
+      horasMigrana:wl0.migraineHours,
+      bano:wl0.bano,
+      digestion:wl0.digestion,
+      energia:wl0.energy,
+      humor:wl0.humor,
+      relax:wl0.relax,
+      musculacion:wl0.musculacion,
+      minutosMusculacion:wl0.musculacionMins,
+      cinta:wl0.cinta,
+      minutosCinta:wl0.cintaMins,
+      mary:wl0.mary,
+      otraActividad:wl0.otraActividad,
+      minutosOtraActividad:wl0.otraActividadMins,
+      ocupacion:wl0.ocupacion,
+      comidas:wl0.comidas,
+      huevos:wl0.huevos,
+      agua:wl0.agua,
+      med1:wl0.med0,med2:wl0.med1,med3:wl0.med2,med4:wl0.med3,med5:wl0.med4,
+      med6:wl0.med5,med7:wl0.med6,med8:wl0.med7,med9:wl0.med8,med10:wl0.med9,
+      notas:wl0.notes,
+    };
+    const r=await api("guardarBienestar",datos);
+    const id=String(r.id||("wl_"+Date.now()));
     if(wlEdit){
       setWlog(p=>p.map(w=>w.id===wlEdit?{...wl0,id:wlEdit}:w));
     }else{
@@ -758,45 +830,66 @@ function LuluAgenda(){
   );
 
   return(
-    <div style={{fontFamily:FONT,background:dbg,minHeight:"100vh",maxWidth:480,margin:"0 auto",color:dtxt,paddingBottom:90}}>
-      {syncMsg&&<div style={{position:"fixed",top:0,left:"50%",transform:"translateX(-50%)",background:C.verde.solid,color:"#FFF",padding:"8px 20px",borderRadius:"0 0 14px 14px",fontSize:13,fontWeight:700,zIndex:2000,whiteSpace:"nowrap"}}>{syncMsg}</div>}
-      {loading&&<div style={{position:"fixed",inset:0,background:"rgba(250,248,245,.92)",zIndex:1500,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:14}}>
-        <span style={{fontSize:48}}>🌻</span>
-        <p style={{fontSize:15,fontWeight:700,color:P.muted}}>Cargando tu agenda...</p>
-      </div>}
+    <div style={{fontFamily:FONT,background:dark?"#1A1614":P.bg,minHeight:"100vh",color:dark?"#F0EAE4":P.text,display:"flex"}}>
 
-      <div style={{padding:"20px 20px 0",display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-        <div>
-          <p style={{margin:0,fontSize:13,color:dmut,fontWeight:600,letterSpacing:.5}}>{DAYS[now.getDay()]}, {now.getDate()} de {MONTHS[now.getMonth()]}</p>
-          <h1 style={{margin:"2px 0 0",fontSize:28,fontWeight:800,lineHeight:1.2}}>Hola, Lulu 🌻</h1>
-        </div>
-        <div style={{display:"flex",gap:8,marginTop:4}}>
-          <button onClick={cargarTodo} style={{background:dsurf,border:`1.5px solid ${dbdr}`,borderRadius:12,width:42,height:42,cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center"}}>🔄</button>
-          <button onClick={()=>setModal("search")} style={{background:dsurf,border:`1.5px solid ${dbdr}`,borderRadius:12,width:42,height:42,cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center"}}>🔍</button>
-          <button onClick={()=>setDark(d=>!d)} style={{background:dsurf,border:`1.5px solid ${dbdr}`,borderRadius:12,width:42,height:42,cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center"}}>{dark?"☀️":"🌙"}</button>
-        </div>
-      </div>
-
-      <div style={{padding:"16px 18px 0"}}>
-        {tab==="home"&&<HomeView/>}
-        {tab==="cal"&&<CalView/>}
-        {tab==="tasks"&&<TasksView/>}
-        {tab==="shop"&&<ShopView/>}
-        {tab==="well"&&<WellView/>}
-      </div>
-
-      <button onClick={()=>tab==="well"?setModal("wl"):tab==="shop"?openNewShItem():tab==="tasks"?openNewTa():openNewEv()} style={{position:"fixed",bottom:86,right:18,width:56,height:56,borderRadius:"50%",background:`linear-gradient(135deg,${C.lila.solid},#9878C8)`,border:"none",color:"#FFF",fontSize:26,cursor:"pointer",boxShadow:`0 4px 20px rgba(123,94,167,.4)`,display:"flex",alignItems:"center",justifyContent:"center",zIndex:100}}>+</button>
-      <button onClick={()=>setModal("ib")} style={{position:"fixed",bottom:86,left:18,background:dsurf,border:`1.5px solid ${dbdr}`,borderRadius:26,padding:"10px 16px",cursor:"pointer",fontSize:13,fontWeight:700,color:dmut,display:"flex",alignItems:"center",gap:5,zIndex:100}}>📬 Inbox</button>
-
-      <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:dsurf,borderTop:`1px solid ${dbdr}`,display:"flex",justifyContent:"space-around",padding:"10px 0 20px",zIndex:200}}>
+      {/* ── Sidebar desktop (oculto en móvil via CSS) ── */}
+      <div className="app-sidebar" style={{background:dark?"#2A2420":"#FFFFFF",borderRight:`1.5px solid ${dark?"#3A3430":P.border}`}}>
+        <div style={{fontSize:17,fontWeight:800,color:dark?"#F0EAE4":P.text,marginBottom:20,padding:"0 8px",lineHeight:1.4}}>Hola, Lulu 🌻<br/><span style={{fontSize:11,fontWeight:600,color:dark?"#9A8E85":P.muted}}>{DAYS[now.getDay()]}, {now.getDate()} de {MONTHS[now.getMonth()]}</span></div>
         {navItems.map(n=>(
-          <button key={n.k} onClick={()=>setTab(n.k)} style={{background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3,opacity:tab===n.k?1:.4,minWidth:50,minHeight:50,justifyContent:"center"}}>
-            <span style={{fontSize:22}}>{n.i}</span>
-            <span style={{fontSize:10,fontWeight:700,color:tab===n.k?C.bordo.solid:dmut}}>{n.l}</span>
-            {tab===n.k&&<span style={{width:4,height:4,borderRadius:"50%",background:C.bordo.solid}}/>}
+          <button key={n.k} onClick={()=>setTab(n.k)} style={{display:"flex",alignItems:"center",gap:10,padding:"11px 12px",borderRadius:12,border:"none",background:tab===n.k?C.bordo.light:"transparent",cursor:"pointer",fontSize:14,fontWeight:700,color:tab===n.k?C.bordo.solid:dark?"#9A8E85":P.muted,textAlign:"left",width:"100%",fontFamily:FONT,marginBottom:2}}>
+            <span style={{fontSize:17,width:22,textAlign:"center"}}>{n.i}</span>{n.l}
           </button>
         ))}
+        <div style={{marginTop:"auto",borderTop:`1px solid ${dark?"#3A3430":P.border}`,paddingTop:10,display:"flex",flexDirection:"column",gap:2}}>
+          <button onClick={()=>setModal("ib")} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:12,border:"none",background:"transparent",cursor:"pointer",fontSize:13,fontWeight:700,color:dark?"#9A8E85":P.muted,fontFamily:FONT}}>📬 Inbox</button>
+          <button onClick={cargarTodo} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:12,border:"none",background:"transparent",cursor:"pointer",fontSize:13,fontWeight:700,color:dark?"#9A8E85":P.muted,fontFamily:FONT}}>🔄 Sincronizar</button>
+          <button onClick={()=>setModal("search")} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:12,border:"none",background:"transparent",cursor:"pointer",fontSize:13,fontWeight:700,color:dark?"#9A8E85":P.muted,fontFamily:FONT}}>🔍 Buscar</button>
+          <button onClick={()=>setDark(d=>!d)} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:12,border:"none",background:"transparent",cursor:"pointer",fontSize:13,fontWeight:700,color:dark?"#9A8E85":P.muted,fontFamily:FONT}}>{dark?"☀️ Modo claro":"🌙 Modo oscuro"}</button>
+        </div>
       </div>
+
+      {/* ── Contenido principal ── */}
+      <div className="app-main" style={{flex:1,minHeight:"100vh",paddingBottom:90}}>
+        {syncMsg&&<div style={{position:"fixed",top:0,left:"50%",transform:"translateX(-50%)",background:C.verde.solid,color:"#FFF",padding:"8px 20px",borderRadius:"0 0 14px 14px",fontSize:13,fontWeight:700,zIndex:2000,whiteSpace:"nowrap"}}>{syncMsg}</div>}
+        {loading&&<div style={{position:"fixed",inset:0,background:"rgba(250,248,245,.92)",zIndex:1500,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:14}}>
+          <span style={{fontSize:48}}>🌻</span>
+          <p style={{fontSize:15,fontWeight:700,color:P.muted}}>Cargando tu agenda...</p>
+        </div>}
+
+        {/* Topbar móvil */}
+        <div className="app-topbar" style={{padding:"20px 20px 0",display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+          <div>
+            <p style={{margin:0,fontSize:13,color:dark?"#9A8E85":P.muted,fontWeight:600,letterSpacing:.5}}>{DAYS[now.getDay()]}, {now.getDate()} de {MONTHS[now.getMonth()]}</p>
+            <h1 style={{margin:"2px 0 0",fontSize:28,fontWeight:800,lineHeight:1.2}}>Hola, Lulu 🌻</h1>
+          </div>
+          <div style={{display:"flex",gap:8,marginTop:4}}>
+            <button onClick={cargarTodo} style={{background:dark?"#2A2420":"#fff",border:`1.5px solid ${dark?"#3A3430":P.border}`,borderRadius:12,width:42,height:42,cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center"}}>🔄</button>
+            <button onClick={()=>setModal("search")} style={{background:dark?"#2A2420":"#fff",border:`1.5px solid ${dark?"#3A3430":P.border}`,borderRadius:12,width:42,height:42,cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center"}}>🔍</button>
+            <button onClick={()=>setDark(d=>!d)} style={{background:dark?"#2A2420":"#fff",border:`1.5px solid ${dark?"#3A3430":P.border}`,borderRadius:12,width:42,height:42,cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center"}}>{dark?"☀️":"🌙"}</button>
+          </div>
+        </div>
+
+        <div className="app-content" style={{padding:"16px 18px 0"}}>
+          {tab==="home"&&<HomeView/>}
+          {tab==="cal"&&<CalView/>}
+          {tab==="tasks"&&<TasksView/>}
+          {tab==="shop"&&<ShopView/>}
+          {tab==="well"&&<WellView/>}
+        </div>
+
+        <button className="app-fab" onClick={()=>tab==="well"?setModal("wl"):tab==="shop"?openNewShItem():tab==="tasks"?openNewTa():openNewEv()} style={{position:"fixed",bottom:86,right:18,width:56,height:56,borderRadius:"50%",background:`linear-gradient(135deg,${C.lila.solid},#9878C8)`,border:"none",color:"#FFF",fontSize:26,cursor:"pointer",boxShadow:`0 4px 20px rgba(123,94,167,.4)`,display:"flex",alignItems:"center",justifyContent:"center",zIndex:100}}>+</button>
+        <button className="app-inbox" onClick={()=>setModal("ib")} style={{position:"fixed",bottom:86,left:18,background:dark?"#2A2420":"#fff",border:`1.5px solid ${dark?"#3A3430":P.border}`,borderRadius:26,padding:"10px 16px",cursor:"pointer",fontSize:13,fontWeight:700,color:dark?"#9A8E85":P.muted,display:"flex",alignItems:"center",gap:5,zIndex:100}}>📬 Inbox</button>
+
+        {/* Nav inferior — solo visible en móvil */}
+        <div className="app-bottomnav" style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:dark?"#2A2420":"#fff",borderTop:`1px solid ${dark?"#3A3430":P.border}`,display:"flex",justifyContent:"space-around",padding:"10px 0 20px",zIndex:200}}>
+          {navItems.map(n=>(
+            <button key={n.k} onClick={()=>setTab(n.k)} style={{background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3,opacity:tab===n.k?1:.4,minWidth:50,minHeight:50,justifyContent:"center"}}>
+              <span style={{fontSize:22}}>{n.i}</span>
+              <span style={{fontSize:10,fontWeight:700,color:tab===n.k?C.bordo.solid:dark?"#9A8E85":P.muted}}>{n.l}</span>
+              {tab===n.k&&<span style={{width:4,height:4,borderRadius:"50%",background:C.bordo.solid}}/>}
+            </button>
+          ))}
+        </div>
 
       {/* MODALES */}
       {modal==="ev"&&<Modal title={editEv?"Editar evento":"Nuevo evento"} onClose={()=>{setModal(null);setEditEv(null);}}>
@@ -854,7 +947,7 @@ function LuluAgenda(){
         <WellnessForm wl0={wl0} setWl0={setWl0} onSave={saveWl} saving={saving} lastMeds={lastWlog}/>
       </Modal>}
 
-      {modal==="menu"&&<MenuModal wdays={wdays} menuData={menuData} setMenuData={setMenuData} comidaList={comidaList} setComidaList={setComidaList} onClose={()=>setModal(null)} onSave={saveMenu} saving={saving}/>}
+      {modal==="menu"&&<MenuModal wdays={wdays} menuData={menuData} setMenuData={setMenuData} onClose={()=>setModal(null)} onSave={saveMenu} saving={saving}/>}
 
       {modal==="search"&&<Modal title="🔍 Buscar" onClose={()=>{setModal(null);setSq("");}}>
         <input style={{...INP,marginBottom:14}} value={sq} onChange={e=>setSq(e.target.value)} placeholder="Buscá eventos, tareas, notas..."/>
@@ -875,7 +968,8 @@ function LuluAgenda(){
         <p style={{fontSize:15,fontWeight:700,color:P.text,marginBottom:14}}>"{resT.title}"</p>
         <Lbl t="Nueva fecha"><input type="date" style={INP} defaultValue={resT.date} onChange={e=>doResched(resT.id,e.target.value)}/></Lbl>
       </Modal>}
-    </div>
+    </div>{/* app-main */}
+    </div>{/* root */}
   );
 }
 
