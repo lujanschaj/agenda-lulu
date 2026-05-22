@@ -270,11 +270,44 @@ function WellnessForm({wl0,setWl0,onSave,saving,lastMeds}){
 // ── Menú semanal ──────────────────────────────────────────────────────────────
 function MenuModal({wdays,menuData,setMenuData,onClose,onSave,saving}){
   var dias=["Lun","Mar","Mie","Jue","Vie","Sab","Dom"];
+  var [comidas,setComidas]=useState(()=>{try{var s=localStorage.getItem("lulu_comidas");return s?JSON.parse(s):[];}catch(e){return [];}});
+  var [nueva,setNueva]=useState("");
+
+  function addComida(){
+    if(!nueva.trim())return;
+    var lista=[...new Set([...comidas,nueva.trim()])];
+    setComidas(lista);
+    try{localStorage.setItem("lulu_comidas",JSON.stringify(lista));}catch(e){}
+    setNueva("");
+  }
+  function delComida(c){
+    var lista=comidas.filter(x=>x!==c);
+    setComidas(lista);
+    try{localStorage.setItem("lulu_comidas",JSON.stringify(lista));}catch(e){}
+  }
   function setMeal(dateStr,tipo,val){
     setMenuData(function(p){var n={};Object.assign(n,p);n[dateStr]=Object.assign({},p[dateStr]);n[dateStr][tipo]=val;return n;});
   }
   return(
     <Modal title="Menu semanal" onClose={onClose}>
+      {/* Mi lista de comidas */}
+      <div style={{background:C.verde.light,borderRadius:14,padding:"12px 14px",marginBottom:16}}>
+        <p style={{fontSize:12,fontWeight:800,color:C.verde.text,marginBottom:10,textTransform:"uppercase",letterSpacing:.8}}>Mi lista de comidas</p>
+        {comidas.length>0&&<div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
+          {comidas.map(c=>(
+            <span key={c} style={{background:P.surf,border:`1px solid ${C.verde.border}`,borderRadius:20,padding:"4px 10px",fontSize:12,color:C.verde.text,fontWeight:600,display:"flex",alignItems:"center",gap:5,cursor:"default"}}>
+              {c}
+              <span onClick={()=>delComida(c)} style={{cursor:"pointer",color:C.bordo.solid,fontWeight:800,fontSize:13,lineHeight:1}}>×</span>
+            </span>
+          ))}
+        </div>}
+        <div style={{display:"flex",gap:8}}>
+          <input style={{...INP,flex:1,fontSize:14}} value={nueva} onChange={e=>setNueva(e.target.value)} placeholder="Agregar comida..." onKeyDown={e=>e.key==="Enter"&&addComida()}/>
+          <button onClick={addComida} style={{background:C.verde.solid,border:"none",borderRadius:12,padding:"0 16px",color:"#FFF",fontWeight:700,cursor:"pointer",fontSize:20,minHeight:44,minWidth:44}}>+</button>
+        </div>
+      </div>
+
+      {/* Días */}
       {wdays.map(function(d,i){
         var ds=fmt(d);
         var menu=menuData[ds]||{};
@@ -282,12 +315,28 @@ function MenuModal({wdays,menuData,setMenuData,onClose,onSave,saving}){
           <div key={ds} style={{background:P.sAlt,borderRadius:14,padding:"12px 14px",marginBottom:10}}>
             <p style={{fontSize:13,fontWeight:800,color:P.text,marginBottom:10}}>{dias[i]} {d.getDate()} de {MONTHS[d.getMonth()]}</p>
             <Lbl t="Almuerzo">
-              <input style={INP} value={menu.almuerzo||""} onChange={function(e){setMeal(ds,"almuerzo",e.target.value);}} placeholder="Que vas a almorzar?"/>
-              <input style={{...INP,marginTop:6,fontSize:14}} value={menu.almuerzoCom||""} onChange={function(e){setMeal(ds,"almuerzoCom",e.target.value);}} placeholder="Complemento / detalle..."/>
+              {comidas.length>0
+                ?<select style={SEL} value={menu.almuerzo||""} onChange={e=>setMeal(ds,"almuerzo",e.target.value)}>
+                    <option value="">— elegir —</option>
+                    {comidas.map(c=><option key={c} value={c}>{c}</option>)}
+                    <option value="__otro__">Otro...</option>
+                  </select>
+                :<input style={INP} value={menu.almuerzo||""} onChange={e=>setMeal(ds,"almuerzo",e.target.value)} placeholder="Que vas a almorzar?"/>
+              }
+              {(menu.almuerzo==="__otro__"||comidas.length===0)&&<input style={{...INP,marginTop:6}} value={menu.almuerzoCustom||""} onChange={e=>setMeal(ds,"almuerzoCustom",e.target.value)} placeholder="Escribi el plato..."/>}
+              <input style={{...INP,marginTop:6,fontSize:13}} value={menu.almuerzoCom||""} onChange={e=>setMeal(ds,"almuerzoCom",e.target.value)} placeholder="Complemento / detalle..."/>
             </Lbl>
             <Lbl t="Cena">
-              <input style={INP} value={menu.cena||""} onChange={function(e){setMeal(ds,"cena",e.target.value);}} placeholder="Que vas a cenar?"/>
-              <input style={{...INP,marginTop:6,fontSize:14}} value={menu.cenaCom||""} onChange={function(e){setMeal(ds,"cenaCom",e.target.value);}} placeholder="Complemento / detalle..."/>
+              {comidas.length>0
+                ?<select style={SEL} value={menu.cena||""} onChange={e=>setMeal(ds,"cena",e.target.value)}>
+                    <option value="">— elegir —</option>
+                    {comidas.map(c=><option key={c} value={c}>{c}</option>)}
+                    <option value="__otro__">Otro...</option>
+                  </select>
+                :<input style={INP} value={menu.cena||""} onChange={e=>setMeal(ds,"cena",e.target.value)} placeholder="Que vas a cenar?"/>
+              }
+              {(menu.cena==="__otro__"||comidas.length===0)&&<input style={{...INP,marginTop:6}} value={menu.cenaCustom||""} onChange={e=>setMeal(ds,"cenaCustom",e.target.value)} placeholder="Escribi el plato..."/>}
+              <input style={{...INP,marginTop:6,fontSize:13}} value={menu.cenaCom||""} onChange={e=>setMeal(ds,"cenaCom",e.target.value)} placeholder="Complemento / detalle..."/>
             </Lbl>
           </div>
         );
@@ -344,14 +393,19 @@ function LuluAgenda(){
 
   useEffect(()=>{cargarTodo();},[]);
   useEffect(()=>{try{localStorage.setItem("lulu_menu",JSON.stringify(menuData));}catch(e2){}},[menuData]);
-  useEffect(()=>{var iv=setInterval(()=>cargarTodo(),300000);var onVis=function(){if(document.visibilityState==="visible")cargarTodo();};document.addEventListener("visibilitychange",onVis);return function(){clearInterval(iv);document.removeEventListener("visibilitychange",onVis);};},[]);
+  useEffect(()=>{
+    // Refresh silencioso cada 10 minutos — no muestra loading ni borra datos
+    var iv=setInterval(()=>cargarTodo(true),10*60*1000);
+    return function(){clearInterval(iv);};
+  },[]);
 
   // ── Carga desde Sheets ────────────────────────────────────────────────────
-  async function cargarTodo(){
-    setLoading(true);
+  async function cargarTodo(silencioso=false){
+    if(!silencioso)setLoading(true);
     try{
       const r=await api("leerTodo");
       if(r.ok){
+        // Solo actualizar si Sheets devuelve datos — nunca pisar con vacío
         if(r.eventos?.length)setEvents(r.eventos.map(e=>({
           id:String(e["ID"]||""),
           title:String(e["Título"]||""),
@@ -398,9 +452,9 @@ function LuluAgenda(){
           setShopLists(p=>{let lists=[...p];Object.entries(byList).forEach(([name,items])=>{const id=name.toLowerCase().replace(/\s+/g,"-");const idx=lists.findIndex(l=>l.id===id||l.name===name);if(idx>=0)lists[idx]={...lists[idx],items};else lists.push({id,name,items});});return lists;});
         }
         if(r.inbox?.length)setInbox(r.inbox.map(i=>({id:String(i["ID"]||""),text:String(i["Texto"]||""),date:String(i["Fecha"]||"")})));
-        showSync("✅ Sincronizado con Google Sheets");
-      }else{showSync("⚠️ "+( r.error||"Error al cargar"));}
-    }catch(e){showSync("⚠️ Sin conexión — modo local");}
+        if(!silencioso)showSync("✅ Sincronizado");
+      }else{if(!silencioso)showSync("⚠️ "+(r.error||"Error al cargar"));}
+    }catch(e){if(!silencioso)showSync("⚠️ Sin conexión — mostrando datos guardados");}
     setLoading(false);
   }
 
@@ -682,7 +736,13 @@ function LuluAgenda(){
         </div>
         <p style={{fontSize:12,fontWeight:700,color:dmut,textTransform:"uppercase",letterSpacing:.8,margin:"0 0 9px"}}>Pendientes · {fil.filter(t=>!t.done).length}</p>
         {fil.filter(t=>!t.done).length===0?<Empty t="Sin tareas pendientes"/>:fil.filter(t=>!t.done).map(t=><TaRow key={t.id} t={t} onToggle={()=>togTa(t.id)} onResched={()=>{setResT(t);setModal("resched");}} onConv={()=>conv2ev(t)} onEdit={()=>openEditTa(t)}/>)}
-        {fil.filter(t=>t.done).length>0&&<><p style={{fontSize:12,fontWeight:700,color:dmut,textTransform:"uppercase",letterSpacing:.8,margin:"18px 0 9px"}}>Completadas · {fil.filter(t=>t.done).length}</p>{fil.filter(t=>t.done).map(t=><TaRow key={t.id} t={t} onToggle={()=>togTa(t.id)} onResched={()=>{setResT(t);setModal("resched");}} onConv={()=>conv2ev(t)} onEdit={()=>openEditTa(t)}/>)}</>}
+        {fil.filter(t=>t.done).length>0&&<>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",margin:"18px 0 9px"}}>
+            <p style={{fontSize:12,fontWeight:700,color:dmut,textTransform:"uppercase",letterSpacing:.8,margin:0}}>Completadas · {fil.filter(t=>t.done).length}</p>
+            <button onClick={async()=>{if(!window.confirm("¿Borrar todas las tareas completadas?"))return;const done=fil.filter(t=>t.done);for(const t of done)await api("eliminarTarea",{id:t.id});setTasks(p=>p.filter(t=>!t.done));showSync("🗑️ Completadas borradas");}} style={{background:P.surf,border:`1px solid ${C.bordo.border}`,borderRadius:10,padding:"6px 12px",cursor:"pointer",fontSize:12,fontWeight:700,color:C.bordo.solid,minHeight:32}}>Borrar</button>
+          </div>
+          {fil.filter(t=>t.done).map(t=><TaRow key={t.id} t={t} onToggle={()=>togTa(t.id)} onResched={()=>{setResT(t);setModal("resched");}} onConv={()=>conv2ev(t)} onEdit={()=>openEditTa(t)}/>)}
+        </>}
       </div>
     );
   };
