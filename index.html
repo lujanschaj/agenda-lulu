@@ -16,7 +16,7 @@
     @media(min-width:768px){
       body{background:#EDE8E1;}
       #root{display:flex;min-height:100vh;}
-      .lsb{width:220px;flex-shrink:0;position:fixed;top:0;left:0;height:100vh;background:#fff;border-right:1.5px solid #EDE8E1;display:flex;flex-direction:column;padding:24px 12px 20px;gap:2px;z-index:300;}
+      .lsb{width:220px;flex-shrink:0;position:fixed;top:0;left:0;height:100vh;background:#fff;border-right:1.5px solid #EDE8E1;display:flex;flex-direction:column;padding:24px 12px 20px;gap:2px;z-index:300;overflow-y:auto;}
       .lmain{margin-left:220px;flex:1;max-width:680px;padding:24px 32px 80px;}
       .ltopbar{display:none!important;}
       .lnav{display:none!important;}
@@ -121,7 +121,7 @@ function YesNo({val,onChange,variant="verde"}){
 function Modal({title,onClose,children}){
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(45,37,32,.38)",zIndex:1000,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()} style={{background:P.surf,borderRadius:"24px 24px 0 0",width:"100%",maxWidth:480,padding:"24px 20px 80px",maxHeight:"90vh",overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:P.surf,borderRadius:"24px 24px 0 0",width:"100%",maxWidth:560,padding:"24px 20px 80px",maxHeight:"90vh",overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
           <h3 style={{margin:0,fontSize:18,fontWeight:800,color:P.text}}>{title}</h3>
           <button onClick={onClose} style={{background:P.sAlt,border:"none",borderRadius:"50%",width:40,height:40,cursor:"pointer",fontSize:18,color:P.muted,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
@@ -189,7 +189,7 @@ function TaRow({t,onToggle,onResched,onConv,onEdit,compact}){
         </div>
         <div style={{display:"flex",gap:7,marginTop:5,flexWrap:"wrap",alignItems:"center"}}>
           <CatTag cat={t.cat} sm/>
-          {t.date&&<span style={{fontSize:11,color:P.muted}}>{t.date}</span>}
+          {t.date&&<span style={{fontSize:11,color:P.muted}}>{(()=>{const d=(t.date||"").slice(0,10);if(!d)return "";const[y,m,dd]=d.split("-").map(Number);const ns=["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];return dd+" "+ns[m-1]+" "+y;})()}</span>}
         </div>
       </div>
     </div>
@@ -353,11 +353,11 @@ function LuluAgenda(){
   const [saving,setSaving]=useState(false);
   const [syncMsg,setSyncMsg]=useState("");
 
-  const [events,setEvents]=useState([]);
-  const [tasks,setTasks]=useState([]);
+  const [events,setEvents]=useState(()=>{try{const s=localStorage.getItem("lulu_events");return s?JSON.parse(s):[]}catch(e){return []}});
+  const [tasks,setTasks]=useState(()=>{try{const s=localStorage.getItem("lulu_tasks");return s?JSON.parse(s):[]}catch(e){return []}});
   const [inbox,setInbox]=useState([]);
   const [shopLists,setShopLists]=useState([{id:"general",name:"General",items:[]},{id:"coto",name:"Coto",items:[]},{id:"mayorista",name:"Mayorista",items:[]}]);
-  const [wlog,setWlog]=useState([]);
+  const [wlog,setWlog]=useState(()=>{try{const s=localStorage.getItem("lulu_wlog");return s?JSON.parse(s):[]}catch(e){return []}});
   const [menuData,setMenuData]=useState(()=>{try{var s=localStorage.getItem("lulu_menu");return s?JSON.parse(s):{};  }catch(e2){return{};}});
   
 
@@ -393,9 +393,11 @@ function LuluAgenda(){
 
   useEffect(()=>{cargarTodo();},[]);
   useEffect(()=>{try{localStorage.setItem("lulu_menu",JSON.stringify(menuData));}catch(e2){}},[menuData]);
+  useEffect(()=>{try{localStorage.setItem("lulu_events",JSON.stringify(events));}catch(e2){}},[events]);
+  useEffect(()=>{try{localStorage.setItem("lulu_tasks",JSON.stringify(tasks));}catch(e2){}},[tasks]);
+  useEffect(()=>{try{localStorage.setItem("lulu_wlog",JSON.stringify(wlog));}catch(e2){}},[wlog]);
   useEffect(()=>{
-    // Refresh silencioso cada 10 minutos — no muestra loading ni borra datos
-    var iv=setInterval(()=>cargarTodo(true),10*60*1000);
+    var iv=setInterval(()=>cargarTodo(true),15*60*1000);
     return function(){clearInterval(iv);};
   },[]);
 
@@ -412,8 +414,8 @@ function LuluAgenda(){
           timeS:String(e["Hora Inicio"]||""),
           timeE:String(e["Hora Fin"]||""),
           travel:Number(e["Tiempo Viaje (min)"])||0,
-          date:String(e["Fecha"]||""),
-          cat:String(e["Categoría"]||"personal").toLowerCase(),
+          date:String(e["Fecha"]||"").slice(0,10),
+          cat:String(e["Categoría"]||"personal").trim().toLowerCase(),
           rep:String(e["Repetición"]||"none"),
           notes:String(e["Notas"]||""),
           done:e["Hecho"]==="TRUE"||e["Hecho"]===true,
@@ -421,8 +423,8 @@ function LuluAgenda(){
         if(r.tareas?.length)setTasks(r.tareas.map(t=>({
           id:String(t["ID"]||""),
           title:String(t["Título"]||""),
-          date:String(t["Fecha"]||""),
-          cat:String(t["Categoría"]||"personal").toLowerCase(),
+          date:String(t["Fecha"]||"").slice(0,10),
+          cat:String(t["Categoría"]||"personal").trim().toLowerCase(),
           notes:String(t["Notas"]||""),
           done:t["Hecho"]==="TRUE"||t["Hecho"]===true,
           hi:t["Prioridad Alta"]==="TRUE"||t["Prioridad Alta"]===true,
@@ -528,7 +530,22 @@ function LuluAgenda(){
   // ── Bienestar ─────────────────────────────────────────────────────────────
   const saveWl=async()=>{
     setSaving(true);
-    const r=await api("guardarBienestar",wl0);
+    const datos={
+      id:wlEdit||undefined,
+      fecha:wl0.date,
+      "Horas Sueño":wl0.sleep,"Calidad Sueño":wl0.sleepQ,"Peso":wl0.weight,
+      "Migraña":wl0.migraine||"No","Horas Migraña":wl0.migraineHours,
+      "Digestión":wl0.digestion,"Baño":wl0.bano,
+      "Energía":wl0.energy,"Humor":wl0.humor,"Relax (min)":wl0.relax,
+      "Musculación":wl0.musculacion,"Minutos Musculación":wl0.musculacionMins,
+      "Cinta":wl0.cinta,"Minutos Cinta":wl0.cintaMins,
+      "Mary":wl0.mary,"Otra Actividad":wl0.otraActividad,"Minutos Otra Actividad":wl0.otraActividadMins,
+      "Ocupación":wl0.ocupacion,"Comidas":wl0.comidas,"Huevos":wl0.huevos,"Agua YETI":wl0.agua,
+      "Med1":wl0.med0,"Med2":wl0.med1,"Med3":wl0.med2,"Med4":wl0.med3,"Med5":wl0.med4,
+      "Med6":wl0.med5,"Med7":wl0.med6,"Med8":wl0.med7,"Med9":wl0.med8,"Med10":wl0.med9,
+      "Notas":wl0.notes,
+    };
+    const r=await api("guardarBienestar",datos);
     const id=String(r.id||Date.now());
     if(wlEdit){
       setWlog(p=>p.map(w=>w.id===wlEdit?{...wl0,id:wlEdit}:w));
@@ -632,7 +649,7 @@ function LuluAgenda(){
         <Sec title="Inbox" action={{label:"+ agregar",fn:()=>setModal("ib")}}>
           {inbox.length===0?<Empty t="Inbox vacío"/>:inbox.slice(0,3).map(i=>(
             <div key={i.id} style={{background:C.lila.light,borderRadius:12,padding:"12px 14px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-              <p style={{margin:0,fontSize:14,color:C.lila.text,flex:1,lineHeight:1.5}}>{i.text}</p>
+<div style={{flex:1}}><p style={{margin:0,fontSize:14,color:C.lila.text,lineHeight:1.5}}>{i.text}</p>{i.date&&<p style={{margin:"3px 0 0",fontSize:11,color:C.lila.text,opacity:.6}}>{i.date}</p>}</div>
               <button onClick={()=>delIb(i.id)} style={{background:"none",border:"none",cursor:"pointer",color:P.muted,fontSize:20,marginLeft:10,padding:0,minWidth:32,minHeight:32,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
             </div>
           ))}
@@ -643,7 +660,7 @@ function LuluAgenda(){
         <Sec title="Bienestar" action={{label:"Registrar hoy",fn:()=>setModal("wl")}}>
           {wlog.length===0
             ?<div style={{background:C.verde.light,borderRadius:14,padding:18,textAlign:"center"}}><p style={{margin:0,fontSize:28}}>🌿</p><p style={{margin:"6px 0 0",fontSize:14,color:C.verde.text}}>Registrá tu bienestar de hoy</p></div>
-            :<div style={{background:C.verde.light,borderRadius:14,padding:"14px 16px"}}><p style={{margin:"0 0 8px",fontSize:13,fontWeight:700,color:C.verde.text}}>Último · {wlog[wlog.length-1].date}</p><div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{wlog[wlog.length-1].sleep&&<Chip label={`💤 ${wlog[wlog.length-1].sleep}h`} bg={C.verde.light} col={C.verde.text}/>}{wlog[wlog.length-1].energy&&<Chip label={`⚡ ${wlog[wlog.length-1].energy}/10`}/>}{wlog[wlog.length-1].humor&&<Chip label={wlog[wlog.length-1].humor}/>}</div></div>}
+            :<div style={{background:C.verde.light,borderRadius:14,padding:"14px 16px"}}><p style={{margin:"0 0 8px",fontSize:13,fontWeight:700,color:C.verde.text}}>Último · {(()=>{const d=(wlog[wlog.length-1].date||"").slice(0,10);const[y,m,dd]=d.split("-").map(Number);const ns=["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];return dd+" "+ns[m-1];})()}</p><div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{wlog[wlog.length-1].sleep&&<Chip label={`💤 ${wlog[wlog.length-1].sleep}h`} bg={C.verde.light} col={C.verde.text}/>}{wlog[wlog.length-1].energy&&<Chip label={`⚡ ${wlog[wlog.length-1].energy}/10`}/>}{wlog[wlog.length-1].humor&&<Chip label={wlog[wlog.length-1].humor}/>}</div></div>}
         </Sec>
       </div>
     );
@@ -781,11 +798,21 @@ function LuluAgenda(){
         <p style={{margin:"0 0 14px",fontSize:13,color:P.muted}}>{wlog.length} registros guardados</p>
         <button onClick={()=>{setWl0({...BLANK_WL});setWlEdit(null);setModal("wl");}} style={{...SAVE,width:"auto",padding:"11px 26px",display:"inline-block"}}>+ Nuevo registro</button>
       </div>
-      {wlog.length===0?<Empty t="Aún no hay registros"/>:[...wlog].reverse().map(w=>(
+      {wlog.length===0?<Empty t="Aún no hay registros"/>:[...wlog].reverse().map(w=>{
+        const wd=w.date?w.date.slice(0,10):"";
+        const [wy,wm,wdd]=wd?wd.split("-").map(Number):[0,0,0];
+        const wfmt=wd?`${DAYS[new Date(wd+"T12:00:00").getDay()]} ${wdd} de ${MONTHS[wm-1]}`:"";
+        return(
         <div key={w.id} style={{background:dsurf,borderRadius:16,padding:15,marginBottom:11,border:`1px solid ${dbdr}`}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:9}}>
-            <p style={{margin:0,fontSize:14,fontWeight:700,color:dtxt}}>{w.date}</p>
-            <button onClick={()=>openEditWl(w)} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,color:dmut,minWidth:32,minHeight:32}}>✏️</button>
+            <div>
+              <p style={{margin:0,fontSize:15,fontWeight:800,color:dtxt}}>{wfmt}</p>
+              <p style={{margin:"1px 0 0",fontSize:11,color:dmut}}>{wd}</p>
+            </div>
+            <div style={{display:"flex",gap:6}}>
+              <button onClick={()=>openEditWl(w)} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,color:dmut,minWidth:32,minHeight:32}}>✏️</button>
+              <button onClick={async()=>{if(!window.confirm("¿Eliminar este registro?"))return;await api("eliminarBienestar",{id:w.id});setWlog(p=>p.filter(x=>x.id!==w.id));showSync("🗑️ Registro eliminado");}} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,color:C.bordo.solid,minWidth:32,minHeight:32}}>🗑️</button>
+            </div>
           </div>
           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
             {w.sleep&&<Chip label={`💤 ${w.sleep}h`} bg={C.lila.light} col={C.lila.text}/>}
@@ -802,7 +829,8 @@ function LuluAgenda(){
           {[0,1,2,3,4,5,6,7,8,9].some(i=>w[`med${i}`])&&<p style={{margin:"8px 0 0",fontSize:12,color:dmut}}>💊 {[0,1,2,3,4,5,6,7,8,9].map(i=>w[`med${i}`]).filter(Boolean).join(", ")}</p>}
           {w.notes&&<p style={{margin:"8px 0 0",fontSize:12,color:dmut,fontStyle:"italic"}}>{w.notes}</p>}
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 
