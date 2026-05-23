@@ -365,7 +365,7 @@ function LuluAgenda(){
   const [tasks,setTasks]=useState(()=>{try{const s=localStorage.getItem("lulu_tasks");return s?JSON.parse(s):[]}catch(e){return []}});
   const [inbox,setInbox]=useState([]);
   const [shopLists,setShopLists]=useState([{id:"general",name:"General",items:[]},{id:"coto",name:"Coto",items:[]},{id:"mayorista",name:"Mayorista",items:[]}]);
-  const [wlog,setWlog]=useState(()=>{try{const s=localStorage.getItem("lulu_wlog");return s?JSON.parse(s):[]}catch(e){return []}});
+  const [wlog,setWlog]=useState(()=>{try{const s=localStorage.getItem("lulu_wlog")||localStorage.getItem("lulu_wl");return s?JSON.parse(s):[]}catch(e){return []}});
   const [menuData,setMenuData]=useState(()=>{try{var s=localStorage.getItem("lulu_menu");return s?JSON.parse(s):{};  }catch(e2){return{};}});
   
 
@@ -402,7 +402,6 @@ function LuluAgenda(){
   useEffect(()=>{cargarTodo();},[]);
   useEffect(()=>{try{localStorage.setItem("lulu_ev",JSON.stringify(events));}catch(e){}},[events]);
   useEffect(()=>{try{localStorage.setItem("lulu_ta",JSON.stringify(tasks));}catch(e){}},[tasks]);
-  useEffect(()=>{try{localStorage.setItem("lulu_wl",JSON.stringify(wlog));}catch(e){}},[wlog]);
   useEffect(()=>{try{localStorage.setItem("lulu_menu",JSON.stringify(menuData));}catch(e2){}},[menuData]);
   useEffect(()=>{try{localStorage.setItem("lulu_events",JSON.stringify(events));}catch(e2){}},[events]);
   useEffect(()=>{try{localStorage.setItem("lulu_tasks",JSON.stringify(tasks));}catch(e2){}},[tasks]);
@@ -419,7 +418,7 @@ function LuluAgenda(){
       const r=await api("leerTodo");
       if(r.ok){
         // Solo actualizar si Sheets devuelve datos — nunca pisar con vacío
-        if(r.eventos?.length)setEvents(r.eventos.map(e=>({
+        if(r.eventos?.length){const evNew=r.eventos.map(e=>({
           id:String(e["ID"]||""),
           title:String(e["Título"]||""),
           timeS:cleanHora(String(e["Hora Inicio"]||"")),
@@ -430,8 +429,8 @@ function LuluAgenda(){
           rep:String(e["Repetición"]||"none"),
           notes:String(e["Notas"]||""),
           done:e["Hecho"]==="TRUE"||e["Hecho"]===true,
-        })));
-        if(r.tareas?.length)setTasks(r.tareas.map(t=>({
+        }));setEvents(evNew);}
+        if(r.tareas?.length){const taNew=r.tareas.map(t=>({
           id:String(t["ID"]||""),
           title:String(t["Título"]||""),
           date:String(t["Fecha"]||"").slice(0,10),
@@ -439,9 +438,10 @@ function LuluAgenda(){
           notes:String(t["Notas"]||""),
           done:t["Hecho"]==="TRUE"||t["Hecho"]===true,
           hi:t["Prioridad Alta"]==="TRUE"||t["Prioridad Alta"]===true,
-        })));
-        if(r.bienestar?.length)setWlog(r.bienestar.map(w=>({
-          id:String(w["ID"]||""),date:String(w["Fecha"]||""),
+        }));setTasks(taNew);}
+        if(r.bienestar?.length){
+          const wlogNuevo=r.bienestar.map(w=>({
+          id:String(w["ID"]||""),date:String(w["Fecha"]||"").slice(0,10),
           sleep:w["Horas Sueño"],sleepQ:w["Calidad Sueño"],weight:w["Peso"],
           migraine:w["Migraña"]||"No",migraineHours:w["Horas Migraña"],
           digestion:w["Digestión"],bano:String(w["Baño"]||""),
@@ -454,7 +454,14 @@ function LuluAgenda(){
           med0:w["Med1"],med1:w["Med2"],med2:w["Med3"],med3:w["Med4"],med4:w["Med5"],
           med5:w["Med6"],med6:w["Med7"],med7:w["Med8"],med8:w["Med9"],med9:w["Med10"],
           notes:w["Notas"],
-        })));
+        }));
+          // Deduplicar: si ya existe el id en localStorage, usar el de Sheets
+          setWlog(prev=>{
+            const ids=new Set(wlogNuevo.map(x=>x.id));
+            const merged=[...wlogNuevo,...prev.filter(x=>!ids.has(x.id))];
+            return merged.sort((a,b)=>a.date>b.date?1:-1);
+          });
+        }
         if(r.comprasGeneral?.length){
           const items=r.comprasGeneral.map(s=>({id:String(s["ID"]||""),item:String(s["Ítem"]||""),cat:String(s["Categoría"]||"compras").toLowerCase(),done:s["Hecho"]==="TRUE"||s["Hecho"]===true,notes:String(s["Notas"]||"")}));
           setShopLists(p=>p.map(l=>l.id==="general"?{...l,items}:l));
@@ -490,14 +497,15 @@ function LuluAgenda(){
   async function saveEv(){
     if(!ev0.title||!ev0.timeS||!ev0.timeE)return;
     setSaving(true);
-    const datos={id:editEv||undefined,titulo:(ev0.title||"").trim(),horaInicio:ev0.timeS||"",horaFin:ev0.timeE||"",tiempoViaje:Number(ev0.travel)||0,fecha:ev0.date,categoria:ev0.cat||"personal",repeticion:ev0.rep||"none",notas:ev0.notes||"",hecho:false};
+    const horaS=cleanHora(ev0.timeS||""),horaE=cleanHora(ev0.timeE||"");
+    const datos={id:editEv||undefined,titulo:(ev0.title||"").trim(),horaInicio:horaS,horaFin:horaE,tiempoViaje:Number(ev0.travel)||0,fecha:ev0.date,categoria:ev0.cat||"personal",repeticion:ev0.rep||"none",notas:ev0.notes||"",hecho:false};
     if(editEv){
       setEvents(p=>p.map(e=>e.id===editEv?{...ev0,id:editEv}:e));
       await api("editarEvento",datos);
     }else{
       const r=await api("guardarEvento",datos);
       const id=String(r.id||Date.now());
-      setEvents(p=>[...p,{...ev0,id,done:false}]);
+      setEvents(p=>[...p,{...ev0,timeS:cleanHora(ev0.timeS||""),timeE:cleanHora(ev0.timeE||""),title:(ev0.title||"").trim(),cat:ev0.cat||"personal",id,done:false}]);
     }
     setSaving(false);setModal(null);setEditEv(null);showSync("✅ Evento guardado");
   }
@@ -811,18 +819,14 @@ function LuluAgenda(){
       </div>
       {wlog.length===0?<Empty t="Aún no hay registros"/>:[...wlog].reverse().map(w=>{
         const wd=w.date?w.date.slice(0,10):"";
-        const [wy,wm,wdd]=wd?wd.split("-").map(Number):[0,0,0];
-        const wfmt=wd?`${DAYS[new Date(wd+"T12:00:00").getDay()]} ${wdd} de ${MONTHS[wm-1]}`:"";
+        const wfecha=fmtFecha(wd)||"Sin fecha";
         return(
-        <div key={w.id} style={{background:dsurf,borderRadius:16,padding:15,marginBottom:11,border:`1px solid ${dbdr}`}}>
+        <div key={w.id||wd} style={{background:dsurf,borderRadius:16,padding:15,marginBottom:11,border:`1px solid ${dbdr}`}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:9}}>
-            <div>
-              <p style={{margin:0,fontSize:15,fontWeight:800,color:dtxt}}>{wfmt}</p>
-              <p style={{margin:"1px 0 0",fontSize:11,color:dmut}}>{wd}</p>
-            </div>
+            <p style={{margin:0,fontSize:15,fontWeight:800,color:dtxt}}>{wfecha}</p>
             <div style={{display:"flex",gap:6}}>
               <button onClick={()=>openEditWl(w)} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,color:dmut,minWidth:32,minHeight:32}}>✏️</button>
-              <button onClick={async()=>{if(!window.confirm("¿Eliminar este registro?"))return;await api("eliminarBienestar",{id:w.id});setWlog(p=>p.filter(x=>x.id!==w.id));showSync("🗑️ Registro eliminado");}} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,color:C.bordo.solid,minWidth:32,minHeight:32}}>🗑️</button>
+              <button onClick={async()=>{if(!window.confirm("¿Eliminar este registro?"))return;await api("eliminarBienestar",{id:w.id});setWlog(p=>{const n=p.filter(x=>x.id!==w.id);try{localStorage.setItem("lulu_wlog",JSON.stringify(n));}catch(e){}return n;});showSync("🗑️ Registro eliminado");}} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,color:C.bordo.solid,minWidth:32,minHeight:32}}>🗑️</button>
             </div>
           </div>
           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
