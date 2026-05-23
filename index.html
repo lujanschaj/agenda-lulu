@@ -65,7 +65,10 @@ const now=new Date();
 const fmt=d=>{var y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,"0"),dd=String(d.getDate()).padStart(2,"0");return y+"-"+m+"-"+dd;};
 const shift=(d,n)=>{const r=new Date(d);r.setDate(r.getDate()+n);return r;};
 const TODAY=fmt(now);
-const toMins=t=>{if(!t)return 0;const[h,m]=t.split(":").map(Number);return h*60+m;};
+const toMins=t=>{if(!t)return 0;const clean=t.includes("T")?t.split("T")[1].slice(0,5):t.slice(0,5);const[h,m]=clean.split(":").map(Number);return h*60+(m||0);};
+const fmtFecha=d=>{if(!d)return "";const s=(d||"").slice(0,10);if(!s||s.length<10)return s||"";const[y,mo,dd]=s.split("-");return dd+"/"+mo+"/"+String(y).slice(2);};
+const fmtHora=t=>{if(!t)return "";const s=t.includes("T")?t.split("T")[1].slice(0,5):t.slice(0,5);const[h,m]=s.split(":");return parseInt(h)+":"+(m||"00");};
+const cleanHora=t=>{if(!t)return "";return t.includes("T")?t.split("T")[1].slice(0,5):t.slice(0,5);};
 const DAY_START=7*60,DAY_END=23*60,DAY_TOTAL=DAY_END-DAY_START;
 const pct=m=>Math.max(0,Math.min(100,((m-DAY_START)/DAY_TOTAL)*100));
 const durPct=(s,e)=>Math.max(1,((toMins(e)-toMins(s))/DAY_TOTAL)*100);
@@ -147,9 +150,9 @@ function TimelineBar({evs}){
   );
 }
 
-function EvRow({ev,onToggle,onEdit}){
+function EvRow({ev,onToggle,onEdit,onDelete}){
   const c=P.cats[ev.cat]||P.cats.personal;
-  const dur=toMins(ev.timeE)-toMins(ev.timeS);
+  const dur=ev.timeS&&ev.timeE?toMins(ev.timeE)-toMins(ev.timeS):0;
   const durStr=dur>=60?`${Math.floor(dur/60)}h${dur%60>0?" "+dur%60+"min":""}`:`${dur}min`;
   return(
     <div style={{display:"flex",gap:11,padding:"13px 14px",background:ev.done?P.sAlt:c.bg,borderRadius:14,marginBottom:8,opacity:ev.done?.6:1}}>
@@ -159,19 +162,22 @@ function EvRow({ev,onToggle,onEdit}){
       <div style={{flex:1}}>
         <p style={{margin:0,fontSize:15,fontWeight:700,color:P.text,textDecoration:ev.done?"line-through":"none"}}>{ev.title}</p>
         <div style={{display:"flex",gap:8,marginTop:5,flexWrap:"wrap",alignItems:"center"}}>
-          {ev.timeS&&ev.timeE&&<span style={{fontSize:12,color:c.text,fontWeight:700}}>🕐 {ev.timeS} – {ev.timeE} · {durStr}</span>}
+          {ev.timeS&&ev.timeE&&<span style={{fontSize:12,color:c.text,fontWeight:700}}>{fmtHora(ev.timeS)} a {fmtHora(ev.timeE)}{durStr?" · "+durStr:""}</span>}
           {ev.travel>0&&<span style={{fontSize:11,color:P.muted}}>🚌 {ev.travel}min</span>}
           <CatTag cat={ev.cat} sm/>
           {ev.rep==="weekly"&&<span style={{fontSize:11,color:P.muted}}>↻ semanal</span>}
         </div>
         {ev.notes&&<p style={{margin:"5px 0 0",fontSize:12,color:P.muted,fontStyle:"italic"}}>{ev.notes}</p>}
       </div>
-      <button onClick={onEdit} style={{background:"none",border:"none",cursor:"pointer",fontSize:20,padding:"0 4px",color:P.muted,flexShrink:0,minWidth:32,minHeight:32,display:"flex",alignItems:"center",justifyContent:"center"}}>✏️</button>
+      <div style={{display:"flex",flexDirection:"column",gap:2,flexShrink:0}}>
+        <button onClick={onEdit} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,color:P.muted,minWidth:32,minHeight:32,display:"flex",alignItems:"center",justifyContent:"center"}}>✏️</button>
+        <button onClick={async()=>{if(!window.confirm("¿Eliminar evento?"))return;await api("eliminarEvento",{id:ev.id});onDelete&&onDelete(ev.id);}} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,color:C.bordo.solid,minWidth:32,minHeight:32,display:"flex",alignItems:"center",justifyContent:"center"}}>🗑️</button>
+      </div>
     </div>
   );
 }
 
-function TaRow({t,onToggle,onResched,onConv,onEdit,compact}){
+function TaRow({t,onToggle,onResched,onConv,onEdit,onDelete,compact}){
   const c=P.cats[t.cat]||P.cats.personal;
   return(
     <div style={{display:"flex",gap:10,padding:"12px 14px",background:P.surf,borderRadius:14,marginBottom:8,border:`1.5px solid ${P.border}`,opacity:t.done?.5:1}}>
@@ -183,6 +189,7 @@ function TaRow({t,onToggle,onResched,onConv,onEdit,compact}){
           <p style={{margin:0,fontSize:14,fontWeight:700,color:P.text,textDecoration:t.done?"line-through":"none",flex:1,wordBreak:"break-word"}}>{t.hi&&"⚡ "}{t.title}</p>
           {!compact&&<div style={{display:"flex",gap:4,marginLeft:8,flexShrink:0}}>
             <button onClick={onEdit} style={{background:P.sAlt,border:"none",borderRadius:8,width:32,height:32,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>✏️</button>
+            <button onClick={()=>{if(!window.confirm("¿Eliminar tarea?"))return;onDelete&&onDelete(t.id);}} style={{background:P.sAlt,border:"none",borderRadius:8,width:32,height:32,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",color:C.bordo.solid}}>🗑️</button>
             {!t.done&&<button onClick={onResched} style={{background:P.sAlt,border:"none",borderRadius:8,width:32,height:32,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>📆</button>}
             {!t.done&&<button onClick={onConv} style={{background:P.sAlt,border:"none",borderRadius:8,width:32,height:32,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>🗓️</button>}
           </div>}
@@ -196,7 +203,7 @@ function TaRow({t,onToggle,onResched,onConv,onEdit,compact}){
   );
 }
 
-function ShRow({s,onToggle,onEdit}){
+function ShRow({s,onToggle,onEdit,onDelete}){
   const c=P.cats[s.cat]||P.cats.compras;
   return(
     <div style={{display:"flex",alignItems:"center",gap:11,padding:"13px 14px",background:s.done?P.sAlt:P.surf,borderRadius:14,marginBottom:8,border:`1.5px solid ${P.border}`,opacity:s.done?.55:1}}>
@@ -209,6 +216,7 @@ function ShRow({s,onToggle,onEdit}){
       </div>
       {s.cat&&<CatTag cat={s.cat} sm/>}
       <button onClick={onEdit} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,padding:"0 4px",color:P.muted,minWidth:32,minHeight:32,display:"flex",alignItems:"center",justifyContent:"center"}}>✏️</button>
+      <button onClick={()=>{if(!window.confirm("¿Eliminar ítem?"))return;onDelete&&onDelete(s.id);}} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,padding:"0 4px",color:C.bordo.solid,minWidth:32,minHeight:32,display:"flex",alignItems:"center",justifyContent:"center"}}>🗑️</button>
     </div>
   );
 }
@@ -392,6 +400,9 @@ function LuluAgenda(){
   const wdays=weekOf(wBase);
 
   useEffect(()=>{cargarTodo();},[]);
+  useEffect(()=>{try{localStorage.setItem("lulu_ev",JSON.stringify(events));}catch(e){}},[events]);
+  useEffect(()=>{try{localStorage.setItem("lulu_ta",JSON.stringify(tasks));}catch(e){}},[tasks]);
+  useEffect(()=>{try{localStorage.setItem("lulu_wl",JSON.stringify(wlog));}catch(e){}},[wlog]);
   useEffect(()=>{try{localStorage.setItem("lulu_menu",JSON.stringify(menuData));}catch(e2){}},[menuData]);
   useEffect(()=>{try{localStorage.setItem("lulu_events",JSON.stringify(events));}catch(e2){}},[events]);
   useEffect(()=>{try{localStorage.setItem("lulu_tasks",JSON.stringify(tasks));}catch(e2){}},[tasks]);
@@ -411,8 +422,8 @@ function LuluAgenda(){
         if(r.eventos?.length)setEvents(r.eventos.map(e=>({
           id:String(e["ID"]||""),
           title:String(e["Título"]||""),
-          timeS:String(e["Hora Inicio"]||""),
-          timeE:String(e["Hora Fin"]||""),
+          timeS:cleanHora(String(e["Hora Inicio"]||"")),
+          timeE:cleanHora(String(e["Hora Fin"]||"")),
           travel:Number(e["Tiempo Viaje (min)"])||0,
           date:String(e["Fecha"]||"").slice(0,10),
           cat:String(e["Categoría"]||"personal").trim().toLowerCase(),
@@ -601,7 +612,7 @@ function LuluAgenda(){
         <p style={{margin:"0 0 6px",fontSize:12,fontWeight:700,color:dmut,textTransform:"uppercase",letterSpacing:.8}}>{DAYS[new Date(date+"T12:00:00").getDay()]} {new Date(date+"T12:00:00").getDate()}</p>
         {conflict&&<div style={{background:C.bordo.light,borderRadius:10,padding:"10px 12px",marginBottom:10,fontSize:13,color:C.bordo.text,fontWeight:700}}>⚠️ Hay eventos con horarios superpuestos</div>}
         {evs.length>0&&<TimelineBar evs={evs}/>}
-        {evs.length===0&&tas.length===0?<Empty t="Día libre"/>:<>{evs.map(e=><EvRow key={e.id+date} ev={e} onToggle={()=>togEv(e.id)} onEdit={()=>openEditEv(e)}/>)}{tas.map(t=><TaRow key={t.id} t={t} onToggle={()=>togTa(t.id)} onResched={()=>{setResT(t);setModal("resched");}} onConv={()=>conv2ev(t)} onEdit={()=>openEditTa(t)}/>)}</>}
+        {evs.length===0&&tas.length===0?<Empty t="Día libre"/>:<>{evs.map(e=><EvRow key={e.id+date} ev={e} onToggle={()=>togEv(e.id)} onEdit={()=>openEditEv(e)} onDelete={id=>{setEvents(p=>p.filter(x=>x.id!==id));api("eliminarEvento",{id});showSync("🗑️ Evento eliminado");}}/>)}{tas.map(t=><TaRow key={t.id} t={t} onToggle={()=>togTa(t.id)} onResched={()=>{setResT(t);setModal("resched");}} onConv={()=>conv2ev(t)} onEdit={()=>openEditTa(t)} onDelete={async id=>{await api("eliminarTarea",{id});setTasks(p=>p.filter(x=>x.id!==id));showSync("🗑️ Tarea eliminada");}}/>)}</>}
 
         {/* Menú del día */}
         {menu&&(menu.almuerzo||menu.cena)&&(
@@ -641,10 +652,10 @@ function LuluAgenda(){
       <div>
         <Sec title={`Hoy · ${DAYS[now.getDay()]} ${now.getDate()}`} action={{label:"Ver agenda",fn:()=>setTab("cal")}}>
           {todEvs.length>0&&<TimelineBar evs={todEvs}/>}
-          {todEvs.length===0&&todTas.length===0?<Empty t="Día tranquilo"/>:<>{todEvs.map(e=><EvRow key={e.id} ev={e} onToggle={()=>togEv(e.id)} onEdit={()=>openEditEv(e)}/>)}{todTas.map(t=><TaRow key={t.id} t={t} onToggle={()=>togTa(t.id)} onResched={()=>{setResT(t);setModal("resched");}} onConv={()=>conv2ev(t)} onEdit={()=>openEditTa(t)} compact/>)}</>}
+          {todEvs.length===0&&todTas.length===0?<Empty t="Día tranquilo"/>:<>{todEvs.map(e=><EvRow key={e.id} ev={e} onToggle={()=>togEv(e.id)} onEdit={()=>openEditEv(e)} onDelete={id=>{setEvents(p=>p.filter(x=>x.id!==id));api("eliminarEvento",{id});showSync("🗑️ Evento eliminado");}}/>)}{todTas.map(t=><TaRow key={t.id} t={t} onToggle={()=>togTa(t.id)} onResched={()=>{setResT(t);setModal("resched");}} onConv={()=>conv2ev(t)} onEdit={()=>openEditTa(t)} onDelete={async id=>{await api("eliminarTarea",{id});setTasks(p=>p.filter(x=>x.id!==id));showSync("🗑️ Tarea eliminada");}} compact/>)}</>}
         </Sec>
         <Sec title="Pendientes" action={{label:"Ver todas",fn:()=>setTab("tasks")}}>
-          {tasks.filter(t=>!t.done).length===0?<Empty t="Todo al día"/>:tasks.filter(t=>!t.done).slice(0,4).map(t=><TaRow key={t.id} t={t} onToggle={()=>togTa(t.id)} onResched={()=>{setResT(t);setModal("resched");}} onConv={()=>conv2ev(t)} onEdit={()=>openEditTa(t)} compact/>)}
+          {tasks.filter(t=>!t.done).length===0?<Empty t="Todo al día"/>:tasks.filter(t=>!t.done).slice(0,4).map(t=><TaRow key={t.id} t={t} onToggle={()=>togTa(t.id)} onResched={()=>{setResT(t);setModal("resched");}} onConv={()=>conv2ev(t)} onEdit={()=>openEditTa(t)} onDelete={async id=>{await api("eliminarTarea",{id});setTasks(p=>p.filter(x=>x.id!==id));showSync("🗑️ Tarea eliminada");}} compact/>)}
         </Sec>
         <Sec title="Inbox" action={{label:"+ agregar",fn:()=>setModal("ib")}}>
           {inbox.length===0?<Empty t="Inbox vacío"/>:inbox.slice(0,3).map(i=>(
@@ -655,7 +666,7 @@ function LuluAgenda(){
           ))}
         </Sec>
         <Sec title="Compras" action={{label:"Ver lista",fn:()=>setTab("shop")}}>
-          {shopLists[0]?.items.filter(s=>!s.done).length===0?<Empty t="Lista vacía"/>:shopLists[0].items.filter(s=>!s.done).slice(0,3).map(s=><ShRow key={s.id} s={s} onToggle={()=>togShI("general",s.id)} onEdit={()=>openEditShItem("general",s)}/>)}
+          {shopLists[0]?.items.filter(s=>!s.done).length===0?<Empty t="Lista vacía"/>:shopLists[0].items.filter(s=>!s.done).slice(0,3).map(s=><ShRow key={s.id} s={s} onToggle={()=>togShI("general",s.id)} onEdit={()=>openEditShItem("general",s)} onDelete={async id=>{await api(activeList==="general"?"eliminarCompraGeneral":"eliminarCompraLista",{id});setShopLists(p=>p.map(l=>l.id===activeList?{...l,items:l.items.filter(i=>i.id!==id)}:l));showSync("🗑️ Eliminado");}}/>)}
         </Sec>
         <Sec title="Bienestar" action={{label:"Registrar hoy",fn:()=>setModal("wl")}}>
           {wlog.length===0
@@ -752,13 +763,13 @@ function LuluAgenda(){
           {cats.map(c=><button key={c} onClick={()=>setFcat(c)} style={{flex:"0 0 auto",padding:"8px 14px",borderRadius:20,border:`1.5px solid ${fcat===c?C.lila.border:P.border}`,cursor:"pointer",background:fcat===c?C.lila.light:dsurf,color:fcat===c?C.lila.text:dmut,fontSize:13,fontWeight:700,minHeight:40}}>{c==="todas"?"Todas":`${CAT_ICONS[c]} ${c}`}</button>)}
         </div>
         <p style={{fontSize:12,fontWeight:700,color:dmut,textTransform:"uppercase",letterSpacing:.8,margin:"0 0 9px"}}>Pendientes · {fil.filter(t=>!t.done).length}</p>
-        {fil.filter(t=>!t.done).length===0?<Empty t="Sin tareas pendientes"/>:fil.filter(t=>!t.done).map(t=><TaRow key={t.id} t={t} onToggle={()=>togTa(t.id)} onResched={()=>{setResT(t);setModal("resched");}} onConv={()=>conv2ev(t)} onEdit={()=>openEditTa(t)}/>)}
+        {fil.filter(t=>!t.done).length===0?<Empty t="Sin tareas pendientes"/>:fil.filter(t=>!t.done).map(t=><TaRow key={t.id} t={t} onToggle={()=>togTa(t.id)} onResched={()=>{setResT(t);setModal("resched");}} onConv={()=>conv2ev(t)} onEdit={()=>openEditTa(t)} onDelete={async id=>{await api("eliminarTarea",{id});setTasks(p=>p.filter(x=>x.id!==id));showSync("🗑️ Tarea eliminada");}}/>)}
         {fil.filter(t=>t.done).length>0&&<>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",margin:"18px 0 9px"}}>
             <p style={{fontSize:12,fontWeight:700,color:dmut,textTransform:"uppercase",letterSpacing:.8,margin:0}}>Completadas · {fil.filter(t=>t.done).length}</p>
             <button onClick={async()=>{if(!window.confirm("¿Borrar todas las tareas completadas?"))return;const done=fil.filter(t=>t.done);for(const t of done)await api("eliminarTarea",{id:t.id});setTasks(p=>p.filter(t=>!t.done));showSync("🗑️ Completadas borradas");}} style={{background:P.surf,border:`1px solid ${C.bordo.border}`,borderRadius:10,padding:"6px 12px",cursor:"pointer",fontSize:12,fontWeight:700,color:C.bordo.solid,minHeight:32}}>Borrar</button>
           </div>
-          {fil.filter(t=>t.done).map(t=><TaRow key={t.id} t={t} onToggle={()=>togTa(t.id)} onResched={()=>{setResT(t);setModal("resched");}} onConv={()=>conv2ev(t)} onEdit={()=>openEditTa(t)}/>)}
+          {fil.filter(t=>t.done).map(t=><TaRow key={t.id} t={t} onToggle={()=>togTa(t.id)} onResched={()=>{setResT(t);setModal("resched");}} onConv={()=>conv2ev(t)} onEdit={()=>openEditTa(t)} onDelete={async id=>{await api("eliminarTarea",{id});setTasks(p=>p.filter(x=>x.id!==id));showSync("🗑️ Tarea eliminada");}}/>)}
         </>}
       </div>
     );
@@ -784,8 +795,8 @@ function LuluAgenda(){
             <button onClick={clearAll} style={{background:P.surf,border:`1px solid ${C.bordo.border}`,borderRadius:10,padding:"8px 12px",cursor:"pointer",fontSize:12,fontWeight:700,color:C.bordo.solid,minHeight:36}}>Blanquear</button>
           </div>
         </div>
-        {pend.map(s=><ShRow key={s.id} s={s} onToggle={()=>togShI(activeList,s.id)} onEdit={()=>openEditShItem(activeList,s)}/>)}
-        {done.length>0&&<><p style={{fontSize:12,fontWeight:700,color:dmut,textTransform:"uppercase",letterSpacing:.8,margin:"16px 0 8px"}}>Comprado ✓</p>{done.map(s=><ShRow key={s.id} s={s} onToggle={()=>togShI(activeList,s.id)} onEdit={()=>openEditShItem(activeList,s)}/>)}</>}
+        {pend.map(s=><ShRow key={s.id} s={s} onToggle={()=>togShI(activeList,s.id)} onEdit={()=>openEditShItem(activeList,s)} onDelete={async id=>{await api(activeList==="general"?"eliminarCompraGeneral":"eliminarCompraLista",{id});setShopLists(p=>p.map(l=>l.id===activeList?{...l,items:l.items.filter(i=>i.id!==id)}:l));showSync("🗑️ Eliminado");}}/>)}
+        {done.length>0&&<><p style={{fontSize:12,fontWeight:700,color:dmut,textTransform:"uppercase",letterSpacing:.8,margin:"16px 0 8px"}}>Comprado ✓</p>{done.map(s=><ShRow key={s.id} s={s} onToggle={()=>togShI(activeList,s.id)} onEdit={()=>openEditShItem(activeList,s)} onDelete={async id=>{await api(activeList==="general"?"eliminarCompraGeneral":"eliminarCompraLista",{id});setShopLists(p=>p.map(l=>l.id===activeList?{...l,items:l.items.filter(i=>i.id!==id)}:l));showSync("🗑️ Eliminado");}}/>)}</>}
       </div>
     );
   };
