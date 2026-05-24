@@ -371,7 +371,7 @@ function LuluAgenda(){
   const [saving,setSaving]=useState(false);
   const [syncMsg,setSyncMsg]=useState("");
 
-  const [events,setEvents]=useState(()=>{try{const s=localStorage.getItem("lulu_events");return s?JSON.parse(s):[]}catch(e){return []}});
+  const [events,setEvents]=useState(()=>{try{const s=localStorage.getItem("lulu_events");const ev=s?JSON.parse(s):[];return ev.map(e=>({...e,timeS:cleanHora(String(e.timeS||"")),timeE:cleanHora(String(e.timeE||""))}));}catch(e){return []}});
   const [tasks,setTasks]=useState(()=>{try{const s=localStorage.getItem("lulu_tasks");return s?JSON.parse(s):[]}catch(e){return []}});
   const [inbox,setInbox]=useState([]);
   const [shopLists,setShopLists]=useState([{id:"general",name:"General",items:[]},{id:"coto",name:"Coto",items:[]},{id:"mayorista",name:"Mayorista",items:[]}]);
