@@ -109,7 +109,29 @@ async function api(accion,datos={}){
   }
 }
 
-const BLANK_WL={date:TODAY,sleep:"",sleepQ:"",weight:"",migraine:"No",migraineHours:"",bano:"",digestion:"",energy:5,humor:"",relax:"",musculacion:false,musculacionMins:"",cinta:false,cintaMins:"",mary:false,otraActividad:"",otraActividadMins:"",ocupacion:"",comidas:"",huevos:false,agua:"",med0:"",med1:"",med2:"",med3:"",med4:"",med5:"",med6:"",med7:"",med8:"",med9:"",notes:""};
+// Estado base bienestar — nueva estructura v2
+const BLANK_WL={
+  date:TODAY,
+  // Sueño
+  sleep:"",sleepQ:"",
+  // Cuerpo
+  weight:"",
+  migraine:"No",migraineHours:"",migraineIntensity:"",
+  digestion:"",bano:"",
+  // Mente
+  humor:"",energy:3,stress:3,moodNote:"",
+  // Actividad
+  musculacion:false,musculacionMins:"",
+  cinta:false,cintaMins:"",
+  mary:false,otraActividad:"",otraActividadMins:"",
+  ocupacion:"",
+  // Alimentación
+  comidas:"",huevos:false,agua:"",
+  // Notas
+  notes:"",
+};
+// Medicamentos: array separado [{nombre,dosis,hora}]
+const BLANK_MEDS=()=>[{nombre:"",dosis:"",hora:""}];
 
 const INP={width:"100%",padding:"10px 12px",borderRadius:12,border:`1.5px solid ${P.border}`,background:P.sAlt,color:P.text,fontSize:16,fontFamily:FONT,boxSizing:"border-box",outline:"none"};
 const SEL={...INP,cursor:"pointer"};
@@ -244,43 +266,118 @@ function Sec({title,action,children}){
   );
 }
 
+// ── MedsEditor — lista dinámica de medicamentos ───────────────────────────────
+function MedsEditor({meds,setMeds,medsAyer}){
+  const add=()=>setMeds(p=>[...p,{nombre:"",dosis:"",hora:""}]);
+  const del=i=>setMeds(p=>p.filter((_,j)=>j!==i));
+  const upd=(i,k,v)=>setMeds(p=>p.map((m,j)=>j===i?{...m,[k]:v}:m));
+  const copyAyer=()=>{if(medsAyer&&medsAyer.length>0)setMeds(medsAyer.map(m=>({nombre:m.nombre||"",dosis:m.dosis||"",hora:m.hora||""})));};
+  return(
+    <div>
+      {medsAyer&&medsAyer.length>0&&(
+        <button onClick={copyAyer} style={{...SAVE,background:`linear-gradient(135deg,${C.lila.solid},#9878C8)`,marginBottom:14,marginTop:0,fontSize:13,padding:"10px 0"}}>
+          📋 Copiar medicamentos del día anterior
+        </button>
+      )}
+      {meds.map((m,i)=>(
+        <div key={i} style={{background:C.lila.light,borderRadius:14,padding:"12px 13px",marginBottom:10,border:`1.5px solid ${C.lila.border}`}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+            <span style={{fontSize:12,fontWeight:800,color:C.lila.text,textTransform:"uppercase",letterSpacing:.7}}>Medicamento {i+1}</span>
+            <button onClick={()=>del(i)} style={{background:"none",border:"none",cursor:"pointer",fontSize:17,color:C.bordo.solid,minWidth:28,minHeight:28,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+          </div>
+          <input style={{...INP,marginBottom:7}} value={m.nombre} placeholder="Nombre del medicamento" onChange={e=>upd(i,"nombre",e.target.value)}/>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+            <input style={INP} value={m.dosis} placeholder="Dosis (ej: 10mg)" onChange={e=>upd(i,"dosis",e.target.value)}/>
+            <input type="time" style={INP} value={m.hora} onChange={e=>upd(i,"hora",e.target.value)}/>
+          </div>
+        </div>
+      ))}
+      {meds.length<15&&(
+        <button onClick={add} style={{width:"100%",padding:"11px 0",borderRadius:12,border:`1.5px dashed ${C.lila.border}`,background:"transparent",color:C.lila.text,fontSize:14,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
+          + Agregar medicamento
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ── Slider 1-5 con emoji ──────────────────────────────────────────────────────
+function Slider5({val,onChange,variant="lila"}){
+  const sel=variant==="bordo"?C.bordo:variant==="verde"?C.verde:variant==="naranja"?C.naranja:C.lila;
+  const emojis=["😞","😕","😐","🙂","😊"];
+  return(
+    <div style={{display:"flex",alignItems:"center",gap:10}}>
+      <input type="range" min="1" max="5" value={val} onChange={e=>onChange(Number(e.target.value))} style={{flex:1,accentColor:sel.solid,height:32}}/>
+      <span style={{fontSize:22,minWidth:28}}>{emojis[(val||3)-1]}</span>
+      <span style={{fontSize:13,fontWeight:800,color:sel.text,minWidth:16}}>{val}</span>
+    </div>
+  );
+}
+
 // ── Wellness Form ─────────────────────────────────────────────────────────────
-function WellnessForm({wl0,setWl0,onSave,saving,lastMeds}){
+function WellnessForm({wl0,setWl0,meds,setMeds,onSave,saving,medsAyer}){
   const set=useCallback((k,v)=>setWl0(p=>({...p,[k]:v})),[setWl0]);
-  const copyMeds=()=>{if(!lastMeds)return;[0,1,2,3,4,5,6,7,8,9].forEach(i=>set(`med${i}`,lastMeds[`med${i}`]||""));};
   return(
     <div>
       <Lbl t="Fecha"><input type="date" style={INP} value={wl0.date} max={TODAY} onChange={e=>set("date",e.target.value)}/></Lbl>
+
       <SecTit t="💤 Sueño"/>
-      <Lbl t="Horas de sueño"><input type="number" style={INP} value={wl0.sleep} min="0" max="24" placeholder="ej: 7" onChange={e=>set("sleep",e.target.value)}/></Lbl>
+      <Lbl t="Horas de sueño"><input type="number" style={INP} value={wl0.sleep} min="0" max="24" step="0.5" placeholder="ej: 7.5" onChange={e=>set("sleep",e.target.value)}/></Lbl>
       <Lbl t="Calidad de sueño"><SegBtn options={["Excelente","Bueno","Regular","Malo"]} val={wl0.sleepQ} onChange={v=>set("sleepQ",v)} variant="lila"/></Lbl>
+
       <SecTit t="🌡️ Cuerpo"/>
       <Lbl t="Peso (kg)"><input type="number" step="0.1" style={INP} value={wl0.weight} placeholder="ej: 65.5" onChange={e=>set("weight",e.target.value)}/></Lbl>
       <Lbl t="Migraña">
-        <SegBtn options={["No","Leve","Moderada","Fuerte"]} val={wl0.migraine} onChange={v=>set("migraine",v||"No")} variant="bordo"/>
-        {wl0.migraine&&wl0.migraine!=="No"&&<input type="number" style={{...INP,marginTop:8}} value={wl0.migraineHours} placeholder="Duración en horas" onChange={e=>set("migraineHours",e.target.value)}/>}
+        <YesNo val={wl0.migraine!=="No"&&wl0.migraine!==false&&wl0.migraine!==""} onChange={v=>set("migraine",v?"Leve":"No")} variant="bordo"/>
+        {wl0.migraine&&wl0.migraine!=="No"&&(
+          <div style={{marginTop:10,display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+            <div>
+              <label style={{display:"block",fontSize:11,fontWeight:700,color:P.muted,marginBottom:5,textTransform:"uppercase",letterSpacing:.7}}>Intensidad</label>
+              <SegBtn options={["Leve","Moderada","Fuerte"]} val={wl0.migraineIntensity||wl0.migraine} onChange={v=>set("migraineIntensity",v)} variant="bordo"/>
+            </div>
+            <div>
+              <label style={{display:"block",fontSize:11,fontWeight:700,color:P.muted,marginBottom:5,textTransform:"uppercase",letterSpacing:.7}}>Horas</label>
+              <input type="number" style={INP} value={wl0.migraineHours} placeholder="ej: 3" onChange={e=>set("migraineHours",e.target.value)}/>
+            </div>
+          </div>
+        )}
       </Lbl>
       <Lbl t="Digestión"><SegBtn options={["Bien","Gases","Inflamación","Dolor"]} val={wl0.digestion} onChange={v=>set("digestion",v)} variant="naranja"/></Lbl>
-      <Lbl t="Baño (veces)"><SegBtn options={["0","1","2","3","4","5"]} val={wl0.bano} onChange={v=>set("bano",v)} variant="verde"/></Lbl>
-      <SecTit t="✨ Energía & Mente"/>
-      <Lbl t={`Energía · ${wl0.energy}/10`}><input type="range" min="1" max="10" style={{width:"100%",accentColor:C.lila.solid,height:32}} value={wl0.energy} onChange={e=>set("energy",e.target.value)}/></Lbl>
+      <Lbl t="Baño (veces)"><SegBtn options={["0","1","2","3","4","5"]} val={String(wl0.bano)} onChange={v=>set("bano",v)} variant="verde"/></Lbl>
+
+      <SecTit t="😊 Estado de ánimo"/>
       <Lbl t="Humor"><SegBtn options={["Muy bien","Bien","Regular","Variable","Ansiosa","Baja","Insoportable"]} val={wl0.humor} onChange={v=>set("humor",v)} variant="lila"/></Lbl>
-      <Lbl t="Relax (minutos)"><input type="number" style={INP} value={wl0.relax} placeholder="ej: 30" onChange={e=>set("relax",e.target.value)}/></Lbl>
+      <Lbl t={`Energía · ${wl0.energy}/5`}><Slider5 val={Number(wl0.energy)||3} onChange={v=>set("energy",v)} variant="lila"/></Lbl>
+      <Lbl t={`Estrés · ${wl0.stress}/5`}><Slider5 val={Number(wl0.stress)||3} onChange={v=>set("stress",v)} variant="bordo"/></Lbl>
+      <Lbl t="Nota libre"><textarea style={{...INP,minHeight:60,resize:"none"}} value={wl0.moodNote} placeholder="¿Algo en particular hoy?" onChange={e=>set("moodNote",e.target.value)}/></Lbl>
+
       <SecTit t="💪 Actividad física"/>
-      <Lbl t="Musculación"><YesNo val={wl0.musculacion} onChange={v=>set("musculacion",v)} variant="verde"/>{wl0.musculacion&&<input type="number" style={{...INP,marginTop:8}} value={wl0.musculacionMins} placeholder="Minutos" onChange={e=>set("musculacionMins",e.target.value)}/>}</Lbl>
-      <Lbl t="Cinta"><YesNo val={wl0.cinta} onChange={v=>set("cinta",v)} variant="verde"/>{wl0.cinta&&<input type="number" style={{...INP,marginTop:8}} value={wl0.cintaMins} placeholder="Minutos" onChange={e=>set("cintaMins",e.target.value)}/>}</Lbl>
+      <Lbl t="Musculación">
+        <YesNo val={wl0.musculacion} onChange={v=>set("musculacion",v)} variant="verde"/>
+        {wl0.musculacion&&<input type="number" style={{...INP,marginTop:8}} value={wl0.musculacionMins} placeholder="Minutos" onChange={e=>set("musculacionMins",e.target.value)}/>}
+      </Lbl>
+      <Lbl t="Cinta">
+        <YesNo val={wl0.cinta} onChange={v=>set("cinta",v)} variant="verde"/>
+        {wl0.cinta&&<input type="number" style={{...INP,marginTop:8}} value={wl0.cintaMins} placeholder="Minutos" onChange={e=>set("cintaMins",e.target.value)}/>}
+      </Lbl>
       <Lbl t="Mary"><YesNo val={wl0.mary} onChange={v=>set("mary",v)} variant="verde"/></Lbl>
-      <Lbl t="Otra actividad"><input style={INP} value={wl0.otraActividad} placeholder="¿Qué hiciste?" onChange={e=>set("otraActividad",e.target.value)}/>{wl0.otraActividad&&<input type="number" style={{...INP,marginTop:8}} value={wl0.otraActividadMins} placeholder="Minutos" onChange={e=>set("otraActividadMins",e.target.value)}/>}</Lbl>
-      <Lbl t="Ocupación del día"><SegBtn options={["Bajo","Normal","Alto"]} val={wl0.ocupacion} onChange={v=>set("ocupacion",v)} variant="naranja"/></Lbl>
+      <Lbl t="Otra actividad">
+        <input style={INP} value={wl0.otraActividad} placeholder="¿Qué hiciste?" onChange={e=>set("otraActividad",e.target.value)}/>
+        {wl0.otraActividad&&<input type="number" style={{...INP,marginTop:8}} value={wl0.otraActividadMins} placeholder="Minutos" onChange={e=>set("otraActividadMins",e.target.value)}/>}
+      </Lbl>
+      <Lbl t="Ocupación del día"><SegBtn options={["Tranquilo","Normal","Intenso"]} val={wl0.ocupacion} onChange={v=>set("ocupacion",v)} variant="naranja"/></Lbl>
+
       <SecTit t="🥗 Alimentación"/>
-      <Lbl t="Cantidad de comidas"><SegBtn options={["1","2","3","4","5","6"]} val={wl0.comidas} onChange={v=>set("comidas",v)} variant="naranja"/></Lbl>
+      <Lbl t="Cantidad de comidas"><SegBtn options={["1","2","3","4","5","6"]} val={String(wl0.comidas)} onChange={v=>set("comidas",v)} variant="naranja"/></Lbl>
       <Lbl t="Desayuno con huevos"><YesNo val={wl0.huevos} onChange={v=>set("huevos",v)} variant="naranja"/></Lbl>
       <Lbl t="Agua (botellas YETI)"><input type="number" step="0.5" style={INP} value={wl0.agua} placeholder="ej: 2.5" onChange={e=>set("agua",e.target.value)}/></Lbl>
+
       <SecTit t="💊 Medicación"/>
-      {lastMeds&&<button onClick={copyMeds} style={{...SAVE,background:`linear-gradient(135deg,${C.lila.solid},#9878C8)`,marginBottom:12,marginTop:0}}>Copiar medicamentos de ayer</button>}
-      {[0,1,2,3,4,5,6,7,8,9].map(i=><div key={i} style={{marginBottom:8}}><input style={INP} value={wl0[`med${i}`]} placeholder={`Medicamento ${i+1}`} onChange={e=>set(`med${i}`,e.target.value)}/></div>)}
+      <MedsEditor meds={meds} setMeds={setMeds} medsAyer={medsAyer}/>
+
       <SecTit t="📝 Notas"/>
       <Lbl t="Síntomas u observaciones"><textarea style={{...INP,minHeight:70,resize:"none"}} value={wl0.notes} placeholder="Cualquier cosa que quieras registrar..." onChange={e=>set("notes",e.target.value)}/></Lbl>
+
       {saving?<Spinner/>:<button onClick={onSave} style={SAVE}>Guardar registro</button>}
     </div>
   );
@@ -399,6 +496,8 @@ function LuluAgenda(){
   const [ta0,setTa0]=useState({title:"",date:TODAY,cat:"personal",notes:"",hi:false});
   const [ib0,setIb0]=useState("");
   const [wl0,setWl0]=useState({...BLANK_WL});
+  const [wlMeds,setWlMeds]=useState(BLANK_MEDS());
+  const [wlog_meds,setWlogMeds]=useState(()=>{try{const s=localStorage.getItem("lulu_wlog_meds");return s?JSON.parse(s):[]}catch(e){return []}});
   const [shItemForm,setShItemForm]=useState({item:"",cat:"compras",notes:"",listId:"general"});
   const [newListName,setNewListName]=useState("");
   const [editListName,setEditListName]=useState("");
@@ -417,6 +516,7 @@ function LuluAgenda(){
   useEffect(()=>{try{localStorage.setItem("lulu_events",JSON.stringify(events));}catch(e2){}},[events]);
   useEffect(()=>{try{localStorage.setItem("lulu_tasks",JSON.stringify(tasks));}catch(e2){}},[tasks]);
   useEffect(()=>{try{localStorage.setItem("lulu_wlog",JSON.stringify(wlog));}catch(e2){}},[wlog]);
+  useEffect(()=>{try{localStorage.setItem("lulu_wlog_meds",JSON.stringify(wlog_meds));}catch(e2){}},[wlog_meds]);
   useEffect(()=>{
     var iv=setInterval(()=>cargarTodo(true),15*60*1000);
     return function(){clearInterval(iv);};
@@ -424,7 +524,7 @@ function LuluAgenda(){
 
   // ── Carga desde Sheets ────────────────────────────────────────────────────
   function resetCache(){
-    const keys=["lulu_events","lulu_tasks","lulu_wlog","lulu_menu","lulu_ev","lulu_ta","lulu_wl","lulu_comidas"];
+    const keys=["lulu_events","lulu_tasks","lulu_wlog","lulu_wlog_meds","lulu_menu","lulu_ev","lulu_ta","lulu_wl","lulu_comidas"];
     keys.forEach(k=>{try{localStorage.removeItem(k);}catch(e){}});
     cargarTodo();
     showSync("🗑️ Caché limpiado — recargando de Sheets");
@@ -460,19 +560,27 @@ function LuluAgenda(){
           const wlogNuevo=r.bienestar.map(w=>({
           id:String(w["ID"]||""),date:String(w["Fecha"]||"").slice(0,10),
           sleep:w["Horas Sueño"],sleepQ:w["Calidad Sueño"],weight:w["Peso"],
-          migraine:w["Migraña"]||"No",migraineHours:w["Horas Migraña"],
+          migraine:w["Migraña"]||"No",migraineHours:w["Horas Migraña"],migraineIntensity:w["Intensidad Migraña"]||"",
           digestion:w["Digestión"],bano:String(w["Baño"]||""),
-          energy:w["Energía"],humor:w["Humor"],relax:w["Relax (min)"],
+          humor:w["Humor"],energy:w["Energía"]||3,stress:w["Estrés"]||3,moodNote:w["Nota Ánimo"]||"",
           musculacion:w["Musculación"]==="TRUE",musculacionMins:w["Minutos Musculación"],
           cinta:w["Cinta"]==="TRUE",cintaMins:w["Minutos Cinta"],
           mary:w["Mary"]==="TRUE",otraActividad:w["Otra Actividad"],
           otraActividadMins:w["Minutos Otra Actividad"],ocupacion:w["Ocupación"],
           comidas:w["Comidas"],huevos:w["Huevos"]==="TRUE",agua:w["Agua YETI"],
-          med0:w["Med1"],med1:w["Med2"],med2:w["Med3"],med3:w["Med4"],med4:w["Med5"],
-          med5:w["Med6"],med6:w["Med7"],med7:w["Med8"],med8:w["Med9"],med9:w["Med10"],
           notes:w["Notas"],
         }));
           setWlog(wlogNuevo.sort((a,b)=>a.date>b.date?1:-1));
+        }
+        if(r.meds?.length){
+          // Agrupar meds por fecha: {fecha: [{nombre,dosis,hora},...]}
+          const byDate={};
+          r.meds.forEach(m=>{
+            const f=String(m["Fecha"]||"").slice(0,10);
+            if(!byDate[f])byDate[f]=[];
+            byDate[f].push({id:String(m["ID"]||""),nombre:String(m["Nombre"]||""),dosis:String(m["Dosis"]||""),hora:String(m["Hora"]||"")});
+          });
+          setWlogMeds(byDate);
         }
         if(r.comprasGeneral?.length){
           const items=r.comprasGeneral.map(s=>({id:String(s["ID"]||""),item:String(s["Ítem"]||""),cat:String(s["Categoría"]||"compras").toLowerCase(),done:s["Hecho"]==="TRUE"||s["Hecho"]===true,notes:String(s["Notas"]||"")}));
@@ -500,7 +608,6 @@ function LuluAgenda(){
     }).sort((a,b)=>toMins(a.timeS)-toMins(b.timeS));
   }
   function hasConflict(list,ev){return list.some(e=>e.id!==ev.id&&e.date===ev.date&&ev.timeS&&ev.timeE&&toMins(e.timeS)<toMins(ev.timeE)&&toMins(e.timeE)>toMins(ev.timeS));}
-  const lastWlog=wlog.length>0?wlog[wlog.length-1]:null;
   const curList=shopLists.find(l=>l.id===activeList)||shopLists[0];
 
   // ── Eventos ───────────────────────────────────────────────────────────────
@@ -564,28 +671,42 @@ function LuluAgenda(){
     const datos={
       id:wlEdit||undefined,
       fecha:wl0.date,
-      "Horas Sueño":wl0.sleep,"Calidad Sueño":wl0.sleepQ,"Peso":wl0.weight,
-      "Migraña":wl0.migraine||"No","Horas Migraña":wl0.migraineHours,
-      "Digestión":wl0.digestion,"Baño":wl0.bano,
-      "Energía":wl0.energy,"Humor":wl0.humor,"Relax (min)":wl0.relax,
-      "Musculación":wl0.musculacion,"Minutos Musculación":wl0.musculacionMins,
-      "Cinta":wl0.cinta,"Minutos Cinta":wl0.cintaMins,
-      "Mary":wl0.mary,"Otra Actividad":wl0.otraActividad,"Minutos Otra Actividad":wl0.otraActividadMins,
-      "Ocupación":wl0.ocupacion,"Comidas":wl0.comidas,"Huevos":wl0.huevos,"Agua YETI":wl0.agua,
-      "Med1":wl0.med0,"Med2":wl0.med1,"Med3":wl0.med2,"Med4":wl0.med3,"Med5":wl0.med4,
-      "Med6":wl0.med5,"Med7":wl0.med6,"Med8":wl0.med7,"Med9":wl0.med8,"Med10":wl0.med9,
-      "Notas":wl0.notes,
+      sleep:wl0.sleep,sleepQ:wl0.sleepQ,
+      weight:wl0.weight,
+      migraine:wl0.migraine!=="No"&&wl0.migraine?wl0.migraine:"No",
+      migraineHours:wl0.migraineHours,migraineIntensity:wl0.migraineIntensity,
+      digestion:wl0.digestion,bano:wl0.bano,
+      humor:wl0.humor,energy:wl0.energy,stress:wl0.stress,moodNote:wl0.moodNote,
+      musculacion:wl0.musculacion,musculacionMins:wl0.musculacionMins,
+      cinta:wl0.cinta,cintaMins:wl0.cintaMins,
+      mary:wl0.mary,otraActividad:wl0.otraActividad,otraActividadMins:wl0.otraActividadMins,
+      ocupacion:wl0.ocupacion,
+      comidas:wl0.comidas,huevos:wl0.huevos,agua:wl0.agua,
+      notes:wl0.notes,
     };
     const r=await api("guardarBienestar",datos);
-    const id=String(r.id||Date.now());
+    const id=String(r.id||wlEdit||Date.now());
+
+    // Guardar meds en bloque separado
+    const medsLimpias=wlMeds.filter(m=>m.nombre||m.dosis);
+    await api("guardarMeds",{fecha:wl0.date,meds:medsLimpias});
+
     if(wlEdit){
       setWlog(p=>p.map(w=>w.id===wlEdit?{...wl0,id:wlEdit}:w));
     }else{
-      setWlog(p=>[...p,{...wl0,id}]);
+      setWlog(p=>[...p,{...wl0,id}].sort((a,b)=>a.date>b.date?1:-1));
     }
-    setWl0({...BLANK_WL});setSaving(false);setModal(null);setWlEdit(null);showSync("✅ Bienestar guardado");
+    setWlogMeds(p=>({...p,[wl0.date]:medsLimpias}));
+    setWl0({...BLANK_WL});setWlMeds(BLANK_MEDS());
+    setSaving(false);setModal(null);setWlEdit(null);showSync("✅ Bienestar guardado");
   };
-  function openEditWl(w){setWl0({...w});setWlEdit(w.id);setModal("wl");}
+  function openEditWl(w){
+    setWl0({...BLANK_WL,...w});
+    // Cargar meds de ese día si existen
+    const m=wlog_meds[w.date]||BLANK_MEDS();
+    setWlMeds(m.length>0?m:BLANK_MEDS());
+    setWlEdit(w.id);setModal("wl");
+  }
 
   // ── Compras ───────────────────────────────────────────────────────────────
   function openNewShItem(){setShItemForm({item:"",cat:"compras",notes:"",listId:activeList});setEditShItem(null);setModal("shItem");}
@@ -659,7 +780,7 @@ function LuluAgenda(){
           </div>
         )}
         {!wlDay&&(
-          <button onClick={()=>{setWl0({...BLANK_WL,date});setWlEdit(null);setModal("wl");}} style={{width:"100%",marginTop:10,padding:"10px",borderRadius:12,border:`1.5px dashed ${C.verde.border}`,background:"transparent",color:C.verde.text,fontSize:13,fontWeight:700,cursor:"pointer"}}>+ Registrar bienestar de este día</button>
+          <button onClick={()=>{setWl0({...BLANK_WL,date});setWlMeds(BLANK_MEDS());setWlEdit(null);setModal("wl");}} style={{width:"100%",marginTop:10,padding:"10px",borderRadius:12,border:`1.5px dashed ${C.verde.border}`,background:"transparent",color:C.verde.text,fontSize:13,fontWeight:700,cursor:"pointer"}}>+ Registrar bienestar de este día</button>
         )}
       </div>
     );
@@ -688,7 +809,7 @@ function LuluAgenda(){
         <Sec title="Compras" action={{label:"Ver lista",fn:()=>setTab("shop")}}>
           {shopLists[0]?.items.filter(s=>!s.done).length===0?<Empty t="Lista vacía"/>:shopLists[0].items.filter(s=>!s.done).slice(0,3).map(s=><ShRow key={s.id} s={s} onToggle={()=>togShI("general",s.id)} onEdit={()=>openEditShItem("general",s)} onDelete={async id=>{await api(activeList==="general"?"eliminarCompraGeneral":"eliminarCompraLista",{id});setShopLists(p=>p.map(l=>l.id===activeList?{...l,items:l.items.filter(i=>i.id!==id)}:l));showSync("🗑️ Eliminado");}}/>)}
         </Sec>
-        <Sec title="Bienestar" action={{label:"Registrar hoy",fn:()=>setModal("wl")}}>
+        <Sec title="Bienestar" action={{label:"Registrar hoy",fn:()=>{setWl0({...BLANK_WL});setWlMeds(BLANK_MEDS());setWlEdit(null);setModal("wl");}}}>
           {wlog.length===0
             ?<div style={{background:C.verde.light,borderRadius:14,padding:18,textAlign:"center"}}><p style={{margin:0,fontSize:28}}>🌿</p><p style={{margin:"6px 0 0",fontSize:14,color:C.verde.text}}>Registrá tu bienestar de hoy</p></div>
             :<div style={{background:C.verde.light,borderRadius:14,padding:"14px 16px"}}><p style={{margin:"0 0 8px",fontSize:13,fontWeight:700,color:C.verde.text}}>Último · {(()=>{const d=(wlog[wlog.length-1].date||"").slice(0,10);const[y,m,dd]=d.split("-").map(Number);const ns=["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];return dd+" "+ns[m-1];})()}</p><div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{wlog[wlog.length-1].sleep&&<Chip label={`💤 ${wlog[wlog.length-1].sleep}h`} bg={C.verde.light} col={C.verde.text}/>}{wlog[wlog.length-1].energy&&<Chip label={`⚡ ${wlog[wlog.length-1].energy}/10`}/>}{wlog[wlog.length-1].humor&&<Chip label={wlog[wlog.length-1].humor}/>}</div></div>}
@@ -827,34 +948,44 @@ function LuluAgenda(){
         <span style={{fontSize:34}}>🌿</span>
         <h2 style={{margin:"8px 0 3px",fontWeight:800,fontSize:20,color:P.text}}>Tu bienestar</h2>
         <p style={{margin:"0 0 14px",fontSize:13,color:P.muted}}>{wlog.length} registros guardados</p>
-        <button onClick={()=>{setWl0({...BLANK_WL});setWlEdit(null);setModal("wl");}} style={{...SAVE,width:"auto",padding:"11px 26px",display:"inline-block"}}>+ Nuevo registro</button>
+        <button onClick={()=>{setWl0({...BLANK_WL});setWlMeds(BLANK_MEDS());setWlEdit(null);setModal("wl");}} style={{...SAVE,width:"auto",padding:"11px 26px",display:"inline-block"}}>+ Nuevo registro</button>
       </div>
       {wlog.length===0?<Empty t="Aún no hay registros"/>:[...wlog].reverse().map(w=>{
         const wd=w.date?w.date.slice(0,10):"";
         const wfecha=fmtFecha(wd)||"Sin fecha";
+        const wMeds=wlog_meds[wd]||[];
+        const hasMigraine=w.migraine&&w.migraine!=="No";
         return(
         <div key={w.id||wd} style={{background:dsurf,borderRadius:16,padding:15,marginBottom:11,border:`1px solid ${dbdr}`}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:9}}>
             <p style={{margin:0,fontSize:15,fontWeight:800,color:dtxt}}>{wfecha}</p>
             <div style={{display:"flex",gap:6}}>
               <button onClick={()=>openEditWl(w)} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,color:dmut,minWidth:32,minHeight:32}}>✏️</button>
-              <button onClick={async()=>{if(!window.confirm("¿Eliminar este registro?"))return;await api("eliminarBienestar",{id:w.id});setWlog(p=>{const n=p.filter(x=>x.id!==w.id);try{localStorage.setItem("lulu_wlog",JSON.stringify(n));}catch(e){}return n;});showSync("🗑️ Registro eliminado");}} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,color:C.bordo.solid,minWidth:32,minHeight:32}}>🗑️</button>
+              <button onClick={async()=>{if(!window.confirm("¿Eliminar este registro?"))return;await api("eliminarBienestar",{id:w.id,fecha:wd});setWlog(p=>{const n=p.filter(x=>x.id!==w.id);try{localStorage.setItem("lulu_wlog",JSON.stringify(n));}catch(e){}return n;});setWlogMeds(p=>{const n={...p};delete n[wd];return n;});showSync("🗑️ Registro eliminado");}} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,color:C.bordo.solid,minWidth:32,minHeight:32}}>🗑️</button>
             </div>
           </div>
-          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          {/* Chips resumen */}
+          <div style={{display:"flex",gap:7,flexWrap:"wrap",marginBottom:wMeds.length>0||w.moodNote?8:0}}>
             {w.sleep&&<Chip label={`💤 ${w.sleep}h`} bg={C.lila.light} col={C.lila.text}/>}
+            {w.sleepQ&&<Chip label={w.sleepQ} bg={C.lila.light} col={C.lila.text}/>}
             {w.weight&&<Chip label={`⚖️ ${w.weight}kg`} bg={C.naranja.light} col={C.naranja.text}/>}
-            {w.energy&&<Chip label={`⚡ ${w.energy}/10`} bg={C.verde.light} col={C.verde.text}/>}
             {w.humor&&<Chip label={w.humor} bg={C.lila.light} col={C.lila.text}/>}
-            {w.migraine&&w.migraine!=="No"&&<Chip label={`🤕 ${w.migraine}${w.migraineHours?" "+w.migraineHours+"h":""}`} bg={C.bordo.light} col={C.bordo.text}/>}
-            {w.digestion&&<Chip label={w.digestion} bg={C.naranja.light} col={C.naranja.text}/>}
+            {w.energy&&<Chip label={`⚡ E${w.energy}/5`} bg={C.verde.light} col={C.verde.text}/>}
+            {w.stress&&<Chip label={`😤 S${w.stress}/5`} bg={C.bordo.light} col={C.bordo.text}/>}
+            {hasMigraine&&<Chip label={`🤕 ${w.migraineIntensity||w.migraine}${w.migraineHours?" "+w.migraineHours+"h":""}`} bg={C.bordo.light} col={C.bordo.text}/>}
+            {w.digestion&&w.digestion!=="Bien"&&<Chip label={`🫁 ${w.digestion}`} bg={C.naranja.light} col={C.naranja.text}/>}
             {w.agua&&<Chip label={`💧 ${w.agua} YETI`} bg={C.verde.light} col={C.verde.text}/>}
-            {w.musculacion&&<Chip label={`💪 ${w.musculacionMins}min`} bg={C.verde.light} col={C.verde.text}/>}
-            {w.cinta&&<Chip label={`🏃 ${w.cintaMins}min`} bg={C.verde.light} col={C.verde.text}/>}
+            {w.musculacion&&<Chip label={`💪${w.musculacionMins?" "+w.musculacionMins+"min":""}`} bg={C.verde.light} col={C.verde.text}/>}
+            {w.cinta&&<Chip label={`🏃${w.cintaMins?" "+w.cintaMins+"min":""}`} bg={C.verde.light} col={C.verde.text}/>}
             {w.mary&&<Chip label="Mary ✓" bg={C.verde.light} col={C.verde.text}/>}
           </div>
-          {[0,1,2,3,4,5,6,7,8,9].some(i=>w[`med${i}`])&&<p style={{margin:"8px 0 0",fontSize:12,color:dmut}}>💊 {[0,1,2,3,4,5,6,7,8,9].map(i=>w[`med${i}`]).filter(Boolean).join(", ")}</p>}
-          {w.notes&&<p style={{margin:"8px 0 0",fontSize:12,color:dmut,fontStyle:"italic"}}>{w.notes}</p>}
+          {/* Meds */}
+          {wMeds.length>0&&<p style={{margin:"0 0 5px",fontSize:12,color:dmut}}>
+            💊 {wMeds.map(m=>`${m.nombre}${m.dosis?" "+m.dosis:""}${m.hora?" ("+m.hora+")":""}`).join(" · ")}
+          </p>}
+          {/* Nota ánimo */}
+          {w.moodNote&&<p style={{margin:"4px 0 0",fontSize:12,color:dmut,fontStyle:"italic"}}>"{w.moodNote}"</p>}
+          {w.notes&&<p style={{margin:"4px 0 0",fontSize:12,color:dmut,fontStyle:"italic"}}>{w.notes}</p>}
         </div>
         );
       })}
@@ -907,7 +1038,7 @@ function LuluAgenda(){
         {tab==="well"&&<WellView/>}
       </div>
 
-      <button className="lfab" onClick={()=>tab==="well"?setModal("wl"):tab==="shop"?openNewShItem():tab==="tasks"?openNewTa():openNewEv()} style={{position:"fixed",bottom:86,right:18,width:56,height:56,borderRadius:"50%",background:`linear-gradient(135deg,${C.lila.solid},#9878C8)`,border:"none",color:"#FFF",fontSize:26,cursor:"pointer",boxShadow:`0 4px 20px rgba(123,94,167,.4)`,display:"flex",alignItems:"center",justifyContent:"center",zIndex:100}}>+</button>
+      <button className="lfab" onClick={()=>tab==="well"?(()=>{setWl0({...BLANK_WL});setWlMeds(BLANK_MEDS());setWlEdit(null);setModal("wl");})():tab==="shop"?openNewShItem():tab==="tasks"?openNewTa():openNewEv()} style={{position:"fixed",bottom:86,right:18,width:56,height:56,borderRadius:"50%",background:`linear-gradient(135deg,${C.lila.solid},#9878C8)`,border:"none",color:"#FFF",fontSize:26,cursor:"pointer",boxShadow:`0 4px 20px rgba(123,94,167,.4)`,display:"flex",alignItems:"center",justifyContent:"center",zIndex:100}}>+</button>
       <button className="libtn" onClick={()=>setModal("ib")} style={{position:"fixed",bottom:86,left:18,background:dsurf,border:`1.5px solid ${dbdr}`,borderRadius:26,padding:"10px 16px",cursor:"pointer",fontSize:13,fontWeight:700,color:dmut,display:"flex",alignItems:"center",gap:5,zIndex:100}}>📬 Inbox</button>
 
       <div className="lnav" style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:dsurf,borderTop:`1px solid ${dbdr}`,display:"flex",justifyContent:"space-around",padding:"10px 0 20px",zIndex:200}}>
@@ -975,7 +1106,7 @@ function LuluAgenda(){
       </Modal>}
 
       {modal==="wl"&&<Modal title={wlEdit?"Editar registro":"🌿 Registro de bienestar"} onClose={()=>{setModal(null);setWlEdit(null);}}>
-        <WellnessForm wl0={wl0} setWl0={setWl0} onSave={saveWl} saving={saving} lastMeds={lastWlog}/>
+        <WellnessForm wl0={wl0} setWl0={setWl0} meds={wlMeds} setMeds={setWlMeds} onSave={saveWl} saving={saving} medsAyer={(()=>{const ayer=wlog[wlog.length-1];return ayer?wlog_meds[ayer.date]||null:null;})()}/>
       </Modal>}
 
       {modal==="menu"&&<MenuModal wdays={wdays} menuData={menuData} setMenuData={setMenuData} onClose={()=>setModal(null)} onSave={saveMenu} saving={saving}/>}
