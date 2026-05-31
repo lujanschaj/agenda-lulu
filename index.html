@@ -470,6 +470,7 @@ function LuluAgenda(){
   const [syncMsg,setSyncMsg]=useState("");
 
   const [events,setEvents]=useState(()=>{try{const s=localStorage.getItem("lulu_events");const ev=s?JSON.parse(s):[];return ev.map(e=>({...e,timeS:cleanHora(String(e.timeS||"")),timeE:cleanHora(String(e.timeE||""))}));}catch(e){return []}});
+  const [evDone,setEvDone]=useState(()=>{try{const s=localStorage.getItem("lulu_ev_done");return s?JSON.parse(s):{};}catch(e){return {};}});
   const [tasks,setTasks]=useState(()=>{try{const s=localStorage.getItem("lulu_tasks");return s?JSON.parse(s):[]}catch(e){return []}});
   const [inbox,setInbox]=useState([]);
   const [shopLists,setShopLists]=useState([{id:"general",name:"General",items:[]},{id:"coto",name:"Coto",items:[]},{id:"mayorista",name:"Mayorista",items:[]}]);
@@ -605,6 +606,13 @@ function LuluAgenda(){
       if(e.date===date)return true;
       if(e.rep==="weekly"){const orig=new Date(e.date+"T12:00:00"),tgt=new Date(date+"T12:00:00"),diff=Math.round((tgt-orig)/(1000*60*60*24));return diff>0&&diff%7===0;}
       return false;
+    }).map(e=>{
+      // Para eventos repetidos en fecha distinta, el done es por clave id_fecha
+      if(e.rep==="weekly"&&e.date!==date){
+        const key=e.id+"_"+date;
+        return {...e,done:evDone[key]||false,_occDate:date};
+      }
+      return {...e,_occDate:date};
     }).sort((a,b)=>toMins(a.timeS)-toMins(b.timeS));
   }
   function hasConflict(list,ev){return list.some(e=>e.id!==ev.id&&e.date===ev.date&&ev.timeS&&ev.timeE&&toMins(e.timeS)<toMins(ev.timeE)&&toMins(e.timeE)>toMins(ev.timeS));}
@@ -656,7 +664,22 @@ function LuluAgenda(){
     setTasks(p=>p.filter(t=>t.id!==editTa));
     setSaving(false);setModal(null);setEditTa(null);showSync("🗑️ Tarea eliminada");
   }
-  const togEv=async id=>{const ev=events.find(e=>e.id===id);if(!ev)return;const u={...ev,done:!ev.done};setEvents(p=>p.map(e=>e.id===id?u:e));await api("editarEvento",{id,titulo:ev.title||"",horaInicio:ev.timeS||"",horaFin:ev.timeE||"",tiempoViaje:ev.travel||0,fecha:ev.date,categoria:ev.cat||"personal",repeticion:ev.rep||"none",notas:ev.notes||"",hecho:u.done});};
+  // togEv: para eventos repetidos, guarda el estado por "id_fecha" en evDone
+  // Para eventos únicos, modifica el evento directamente
+  const togEv=async(id,fecha)=>{
+    const ev=events.find(e=>e.id===id);
+    if(!ev)return;
+    if(ev.rep==="weekly"&&ev.date!==fecha){
+      // Ocurrencia repetida — guardar estado local por clave id+fecha
+      const key=id+"_"+fecha;
+      setEvDone(p=>{const n={...p,[key]:!p[key]};try{localStorage.setItem("lulu_ev_done",JSON.stringify(n));}catch(e){}return n;});
+    }else{
+      // Evento original — guardar en Sheet
+      const u={...ev,done:!ev.done};
+      setEvents(p=>p.map(e=>e.id===id?u:e));
+      await api("editarEvento",{id,titulo:ev.title||"",horaInicio:ev.timeS||"",horaFin:ev.timeE||"",tiempoViaje:ev.travel||0,fecha:ev.date,categoria:ev.cat||"personal",repeticion:ev.rep||"none",notas:ev.notes||"",hecho:u.done});
+    }
+  };
   const togTa=async id=>{const t=tasks.find(t=>t.id===id);if(!t)return;const u={...t,done:!t.done};setTasks(p=>p.map(x=>x.id===id?u:x));await api("editarTarea",{id,titulo:t.title||"",fecha:t.date,categoria:t.cat||"personal",notas:t.notes||"",hecho:u.done,prioridadAlta:t.hi||false});};
   const conv2ev=async t=>{const r=await api("guardarEvento",{titulo:t.title,horaInicio:"10:00",horaFin:"11:00",tiempoViaje:0,fecha:t.date,categoria:t.cat,repeticion:"none",notas:t.notes,hecho:false});setEvents(p=>[...p,{id:String(r.id||Date.now()),title:t.title,timeS:"10:00",timeE:"11:00",travel:0,date:t.date,cat:t.cat,rep:"none",notes:t.notes,done:false}]);await api("eliminarTarea",{id:t.id});setTasks(p=>p.filter(x=>x.id!==t.id));showSync("✅ Convertido a evento");};
   const doResched=async(id,d)=>{const t=tasks.find(x=>x.id===id);if(!t)return;setTasks(p=>p.map(x=>x.id===id?{...x,date:d}:x));await api("editarTarea",{id,titulo:t.title,fecha:d,categoria:t.cat,notas:t.notes,hecho:t.done,prioridadAlta:t.hi});setResT(null);setModal(null);showSync("📆 Reprogramada");};
@@ -753,7 +776,7 @@ function LuluAgenda(){
         <p style={{margin:"0 0 6px",fontSize:12,fontWeight:700,color:dmut,textTransform:"uppercase",letterSpacing:.8}}>{DAYS[new Date(date+"T12:00:00").getDay()]} {new Date(date+"T12:00:00").getDate()}</p>
         {conflict&&<div style={{background:C.bordo.light,borderRadius:10,padding:"10px 12px",marginBottom:10,fontSize:13,color:C.bordo.text,fontWeight:700}}>⚠️ Hay eventos con horarios superpuestos</div>}
         {evs.length>0&&<TimelineBar evs={evs}/>}
-        {evs.length===0&&tas.length===0?<Empty t="Día libre"/>:<>{evs.map(e=><EvRow key={e.id+date} ev={e} onToggle={()=>togEv(e.id)} onEdit={()=>openEditEv(e)} onDelete={id=>{setEvents(p=>p.filter(x=>x.id!==id));api("eliminarEvento",{id});showSync("🗑️ Evento eliminado");}}/>)}{tas.map(t=><TaRow key={t.id} t={t} onToggle={()=>togTa(t.id)} onResched={()=>{setResT(t);setModal("resched");}} onConv={()=>conv2ev(t)} onEdit={()=>openEditTa(t)} onDelete={async id=>{await api("eliminarTarea",{id});setTasks(p=>p.filter(x=>x.id!==id));showSync("🗑️ Tarea eliminada");}}/>)}</>}
+        {evs.length===0&&tas.length===0?<Empty t="Día libre"/>:<>{evs.map(e=><EvRow key={e.id+date} ev={e} onToggle={()=>togEv(e.id,e._occDate||e.date)} onEdit={()=>openEditEv(e)} onDelete={id=>{setEvents(p=>p.filter(x=>x.id!==id));api("eliminarEvento",{id});showSync("🗑️ Evento eliminado");}}/>)}{tas.map(t=><TaRow key={t.id} t={t} onToggle={()=>togTa(t.id)} onResched={()=>{setResT(t);setModal("resched");}} onConv={()=>conv2ev(t)} onEdit={()=>openEditTa(t)} onDelete={async id=>{await api("eliminarTarea",{id});setTasks(p=>p.filter(x=>x.id!==id));showSync("🗑️ Tarea eliminada");}}/>)}</>}
 
         {/* Menú del día */}
         {menu&&(menu.almuerzo||menu.cena)&&(
@@ -793,7 +816,7 @@ function LuluAgenda(){
       <div>
         <Sec title={`Hoy · ${DAYS[now.getDay()]} ${now.getDate()}`} action={{label:"Ver agenda",fn:()=>setTab("cal")}}>
           {todEvs.length>0&&<TimelineBar evs={todEvs}/>}
-          {todEvs.length===0&&todTas.length===0?<Empty t="Día tranquilo"/>:<>{todEvs.map(e=><EvRow key={e.id} ev={e} onToggle={()=>togEv(e.id)} onEdit={()=>openEditEv(e)} onDelete={id=>{setEvents(p=>p.filter(x=>x.id!==id));api("eliminarEvento",{id});showSync("🗑️ Evento eliminado");}}/>)}{todTas.map(t=><TaRow key={t.id} t={t} onToggle={()=>togTa(t.id)} onResched={()=>{setResT(t);setModal("resched");}} onConv={()=>conv2ev(t)} onEdit={()=>openEditTa(t)} onDelete={async id=>{await api("eliminarTarea",{id});setTasks(p=>p.filter(x=>x.id!==id));showSync("🗑️ Tarea eliminada");}} compact/>)}</>}
+          {todEvs.length===0&&todTas.length===0?<Empty t="Día tranquilo"/>:<>{todEvs.map(e=><EvRow key={e.id} ev={e} onToggle={()=>togEv(e.id,e._occDate||e.date)} onEdit={()=>openEditEv(e)} onDelete={id=>{setEvents(p=>p.filter(x=>x.id!==id));api("eliminarEvento",{id});showSync("🗑️ Evento eliminado");}}/>)}{todTas.map(t=><TaRow key={t.id} t={t} onToggle={()=>togTa(t.id)} onResched={()=>{setResT(t);setModal("resched");}} onConv={()=>conv2ev(t)} onEdit={()=>openEditTa(t)} onDelete={async id=>{await api("eliminarTarea",{id});setTasks(p=>p.filter(x=>x.id!==id));showSync("🗑️ Tarea eliminada");}} compact/>)}</>}
         </Sec>
         <Sec title="Pendientes" action={{label:"Ver todas",fn:()=>setTab("tasks")}}>
           {tasks.filter(t=>!t.done).length===0?<Empty t="Todo al día"/>:tasks.filter(t=>!t.done).slice(0,4).map(t=><TaRow key={t.id} t={t} onToggle={()=>togTa(t.id)} onResched={()=>{setResT(t);setModal("resched");}} onConv={()=>conv2ev(t)} onEdit={()=>openEditTa(t)} onDelete={async id=>{await api("eliminarTarea",{id});setTasks(p=>p.filter(x=>x.id!==id));showSync("🗑️ Tarea eliminada");}} compact/>)}
