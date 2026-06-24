@@ -156,7 +156,24 @@ function YesNo({val,onChange,variant="verde"}){
   return <div style={{display:"flex",gap:8}}>{[true,false].map(v=><button key={String(v)} onClick={()=>onChange(v)} style={{flex:1,padding:"10px 0",borderRadius:10,border:`1.5px solid ${val===v?sel.border:P.border}`,background:val===v?sel.light:P.sAlt,color:val===v?sel.text:P.muted,fontSize:13,fontWeight:700,cursor:"pointer",minHeight:44}}>{v?"Sí":"No"}</button>)}</div>;
 }
 
-function Modal({title,onClose,children}){
+function TimeInput({value,onChange,style}){
+  const horas=Array.from({length:24},(_,i)=>String(i).padStart(2,"0"));
+  const mins=["00","05","10","15","20","25","30","35","40","45","50","55"];
+  const [h,m]=(value||"").split(":")||["",""];
+  return(
+    <div style={{display:"flex",gap:6,alignItems:"center"}}>
+      <select value={h||""} onChange={e=>{const nm=m||"00";onChange(e.target.value+":"+nm);}} style={{...style,flex:1,minWidth:0}}>
+        <option value="">hh</option>
+        {horas.map(hh=><option key={hh} value={hh}>{hh}</option>)}
+      </select>
+      <span style={{fontWeight:800,color:P.muted}}>:</span>
+      <select value={m||""} onChange={e=>{const nh=h||"00";onChange(nh+":"+e.target.value);}} style={{...style,flex:1,minWidth:0}}>
+        <option value="">mm</option>
+        {mins.map(mm=><option key={mm} value={mm}>{mm}</option>)}
+      </select>
+    </div>
+  );
+}
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(45,37,32,.38)",zIndex:1000,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
       <div onClick={e=>e.stopPropagation()} style={{background:P.surf,borderRadius:"24px 24px 0 0",width:"100%",maxWidth:560,padding:"24px 20px 80px",maxHeight:"90vh",overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
@@ -290,7 +307,7 @@ function MedsEditor({meds,setMeds,medsAyer}){
           <input style={{...INP,marginBottom:7}} value={m.nombre} placeholder="Nombre del medicamento" onChange={e=>upd(i,"nombre",e.target.value)}/>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
             <input style={INP} value={m.dosis} placeholder="Dosis (ej: 10mg)" onChange={e=>upd(i,"dosis",e.target.value)}/>
-            <input type="time" style={INP} value={m.hora} onChange={e=>upd(i,"hora",e.target.value)}/>
+            <TimeInput style={INP} value={m.hora} onChange={v=>upd(i,"hora",v)}/>
           </div>
         </div>
       ))}
@@ -1036,8 +1053,10 @@ function LuluAgenda(){
         <span style={{fontSize:34}}>🌿</span>
         <h2 style={{margin:"8px 0 3px",fontWeight:800,fontSize:20,color:P.text}}>Tu bienestar</h2>
         <p style={{margin:"0 0 14px",fontSize:13,color:P.muted}}>{wlog.length} registros guardados</p>
-        <button onClick={()=>{setWl0({...BLANK_WL});setWlMeds(BLANK_MEDS());setWlEdit(null);setModal("wl");}} style={{...SAVE,width:"auto",padding:"11px 26px",display:"inline-block"}}>+ Nuevo registro</button>
-        <button onClick={()=>{setAnalisisRango({desde:"",hasta:TODAY});setModal("analisis");}} style={{...SAVE,width:"auto",padding:"11px 20px",display:"inline-block",marginLeft:8,background:`linear-gradient(135deg,${C.lila.solid},#9878C8)`}}>📊 Análisis</button>
+        <div style={{display:"flex",flexDirection:"column",gap:10,alignItems:"center"}}>
+          <button onClick={()=>{setWl0({...BLANK_WL});setWlMeds(BLANK_MEDS());setWlEdit(null);setModal("wl");}} style={{...SAVE,width:"100%",padding:"11px 26px"}}>+ Nuevo registro</button>
+          <button onClick={()=>{setAnalisisRango({desde:"",hasta:TODAY});setModal("analisis");}} style={{...SAVE,width:"100%",padding:"11px 20px",background:`linear-gradient(135deg,${C.lila.solid},#9878C8)`}}>📊 Análisis de bienestar</button>
+        </div>
       </div>
       {wlog.length===0?<Empty t="Aún no hay registros"/>:[...wlog].reverse().map(w=>{
         const wd=w.date?w.date.slice(0,10):"";
@@ -1147,8 +1166,8 @@ function LuluAgenda(){
         <Lbl t="Título"><input style={INP} value={ev0.title} onChange={e=>setEv0(p=>({...p,title:e.target.value}))} placeholder="¿Qué tenés?"/></Lbl>
         <Lbl t="Fecha"><input type="date" style={INP} value={ev0.date} onChange={e=>setEv0(p=>({...p,date:e.target.value}))}/></Lbl>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-          <Lbl t="Hora inicio"><input type="time" style={INP} value={ev0.timeS} onChange={e=>setEv0(p=>({...p,timeS:e.target.value}))} step="300"/></Lbl>
-          <Lbl t="Hora fin"><input type="time" style={INP} value={ev0.timeE} onChange={e=>setEv0(p=>({...p,timeE:e.target.value}))} step="300"/></Lbl>
+          <Lbl t="Hora inicio"><TimeInput style={INP} value={ev0.timeS} onChange={v=>setEv0(p=>({...p,timeS:v}))}/></Lbl>
+          <Lbl t="Hora fin"><TimeInput style={INP} value={ev0.timeE} onChange={v=>setEv0(p=>({...p,timeE:v}))}/></Lbl>
         </div>
         {ev0.timeS&&ev0.timeE&&toMins(ev0.timeE)>toMins(ev0.timeS)&&<div style={{background:C.verde.light,borderRadius:10,padding:"9px 12px",marginBottom:10,fontSize:13,color:C.verde.text,fontWeight:700}}>⏱️ Duración: {(()=>{const m=toMins(ev0.timeE)-toMins(ev0.timeS);return m>=60?`${Math.floor(m/60)}h${m%60>0?" "+m%60+"min":""}`:`${m}min`;})()}</div>}
         {hasConflict(events,ev0)&&<div style={{background:C.bordo.light,borderRadius:10,padding:"9px 12px",marginBottom:10,fontSize:13,color:C.bordo.text,fontWeight:700}}>⚠️ Este horario se superpone con otro evento</div>}
